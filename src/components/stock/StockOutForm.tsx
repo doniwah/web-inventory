@@ -29,6 +29,8 @@ type Product = {
   nama_produk: string;
   stok: number;
   harga_jual: number;
+  harga_jual_dus?: number;
+  harga_jual_pack?: number;
   box_per_dus?: number;
   pcs_per_box?: number;
 };
@@ -67,9 +69,26 @@ export function StockOutForm() {
   const selectedProduct = products.find((p) => p.id === parseInt(formData.itemId));
   const selectedBundle = bundles.find((b) => b.id === parseInt(formData.itemId));
   
-  const sellPrice = type === 'product' 
-    ? (selectedProduct?.harga_jual || 0) 
-    : (selectedBundle?.harga_jual || 0);
+  
+  // Calculate sell price based on unit
+  const getSellPrice = () => {
+    if (type === 'bundle') {
+      return selectedBundle?.harga_jual || 0;
+    }
+    
+    if (!selectedProduct) return 0;
+    
+    // Use tiered pricing based on unit
+    if (formData.unit === 'dus' && selectedProduct.harga_jual_dus) {
+      return selectedProduct.harga_jual_dus;
+    } else if (formData.unit === 'pack' && selectedProduct.harga_jual_pack) {
+      return selectedProduct.harga_jual_pack;
+    }
+    
+    return selectedProduct.harga_jual; // Default to Pcs price
+  };
+  
+  const sellPrice = getSellPrice();
   
   const totalPrice = Number(formData.quantity) * sellPrice;
   const additionalCost = Number(formData.additionalCost) || 0;
@@ -105,7 +124,7 @@ export function StockOutForm() {
     setLoading(true);
     const { data } = await supabase
       .from('products')
-      .select('id, nama_produk, stok, harga_jual, box_per_dus, pcs_per_box')
+      .select('id, nama_produk, stok, harga_jual, harga_jual_dus, harga_jual_pack, box_per_dus, pcs_per_box')
       .order('nama_produk');
     setProducts(data || []);
     setLoading(false);
@@ -196,6 +215,8 @@ export function StockOutForm() {
               product_id: productId,
               bundle_id: null,
               qty: totalPcs,
+              unit: formData.unit, // Save unit used in transaction
+              harga_jual_per_unit: sellPrice, // Save price per unit for audit
               unit_transaksi: formData.unit,
               qty_transaksi: quantity,
               harga_jual: sellPrice,

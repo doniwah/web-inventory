@@ -411,9 +411,11 @@ const Reports = () => {
         .select(`
           qty,
           total_harga,
+          unit,
+          harga_jual_per_unit,
           product_id,
           bundle_id,
-          products (id, nama_produk, harga_beli, harga_jual),
+          products (id, nama_produk, harga_beli, harga_jual, harga_beli_dus, harga_beli_pack, harga_jual_dus, harga_jual_pack),
           bundles (
             id, 
             name, 
@@ -443,6 +445,19 @@ const Reports = () => {
         if (item.product_id && item.products) {
           const product = item.products;
           const key = `p_${product.id}`;
+          
+          // Determine which price was used based on unit
+          const unit = item.unit || 'pcs';
+          let hargaBeli = product.harga_beli; // Default to Pcs
+          let hargaJual = item.harga_jual_per_unit || product.harga_jual; // Use saved price or default
+          
+          // Get buy price based on unit
+          if (unit === 'dus' && product.harga_beli_dus) {
+            hargaBeli = product.harga_beli_dus;
+          } else if (unit === 'pack' && product.harga_beli_pack) {
+            hargaBeli = product.harga_beli_pack;
+          }
+          
           const existing = marginMap.get(key);
           if (existing) {
             existing.qty_sold += item.qty;
@@ -450,8 +465,8 @@ const Reports = () => {
           } else {
             marginMap.set(key, {
               name: product.nama_produk,
-              harga_beli: product.harga_beli,
-              harga_jual: product.harga_jual,
+              harga_beli: hargaBeli,
+              harga_jual: hargaJual,
               qty_sold: item.qty,
               revenue: item.total_harga,
               type: 'product'

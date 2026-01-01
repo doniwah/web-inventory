@@ -52,8 +52,12 @@ const PAGE_SIZE = 10;
 type Product = {
   id: number;
   nama_produk: string;
-  harga_beli: number;
-  harga_jual: number;
+  harga_beli: number;  // Harga beli per Pcs (base unit)
+  harga_jual: number;  // Harga jual per Pcs (base unit)
+  harga_beli_dus?: number;
+  harga_jual_dus?: number;
+  harga_beli_pack?: number;
+  harga_jual_pack?: number;
   stok: number;
   stok_minimum: number;
   box_per_dus?: number;
@@ -98,6 +102,10 @@ export function ProductsTable() {
     nama_produk: "",
     harga_beli: "",
     harga_jual: "",
+    harga_beli_dus: "",
+    harga_jual_dus: "",
+    harga_beli_pack: "",
+    harga_jual_pack: "",
     stok: "",
     stok_minimum: "",
     box_per_dus: "",
@@ -119,6 +127,7 @@ export function ProductsTable() {
       .select(
         `
           id, nama_produk, harga_beli, harga_jual, stok, stok_minimum, 
+          harga_beli_dus, harga_jual_dus, harga_beli_pack, harga_jual_pack,
           box_per_dus, pcs_per_box, supplier_id, satuan_id,
           suppliers!supplier_id ( nama_supplier ),
           satuans!satuan_id ( nama_satuan )
@@ -223,6 +232,10 @@ export function ProductsTable() {
         nama_produk: product.nama_produk,
         harga_beli: product.harga_beli.toString(),
         harga_jual: product.harga_jual.toString(),
+        harga_beli_dus: product.harga_beli_dus?.toString() || "",
+        harga_jual_dus: product.harga_jual_dus?.toString() || "",
+        harga_beli_pack: product.harga_beli_pack?.toString() || "",
+        harga_jual_pack: product.harga_jual_pack?.toString() || "",
         stok: displayStok.toString(),
         stok_minimum: product.stok_minimum.toString(),
         box_per_dus: product.box_per_dus?.toString() || "",
@@ -238,6 +251,10 @@ export function ProductsTable() {
         nama_produk: "",
         harga_beli: "",
         harga_jual: "",
+        harga_beli_dus: "",
+        harga_jual_dus: "",
+        harga_beli_pack: "",
+        harga_jual_pack: "",
         stok: "",
         stok_minimum: "",
         box_per_dus: "",
@@ -283,6 +300,10 @@ export function ProductsTable() {
         nama_produk: formData.nama_produk,
         harga_beli: parseInt(formData.harga_beli),
         harga_jual: parseInt(formData.harga_jual),
+        harga_beli_dus: formData.harga_beli_dus ? parseInt(formData.harga_beli_dus) : null,
+        harga_jual_dus: formData.harga_jual_dus ? parseInt(formData.harga_jual_dus) : null,
+        harga_beli_pack: formData.harga_beli_pack ? parseInt(formData.harga_beli_pack) : null,
+        harga_jual_pack: formData.harga_jual_pack ? parseInt(formData.harga_jual_pack) : null,
         stok: finalStok,
         stok_minimum: parseInt(formData.stok_minimum) || 0,
         box_per_dus: boxPerDus || null,
@@ -753,6 +774,76 @@ export function ProductsTable() {
                 Info: 1 Dus = {parseInt(formData.box_per_dus) * parseInt(formData.pcs_per_box)} Pcs
               </div>
             )}
+
+            <hr className="col-span-2 my-2" />
+            <div className="col-span-2">
+              <h4 className="text-sm font-semibold mb-2">Harga Per Unit (Opsional)</h4>
+              <p className="text-xs text-muted-foreground">Isi harga berbeda untuk setiap unit jika ada perbedaan harga</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="harga_beli_dus">Harga Beli per Dus</Label>
+              <Input
+                id="harga_beli_dus"
+                type="number"
+                placeholder="Contoh: 160000"
+                value={formData.harga_beli_dus}
+                onChange={(e) =>
+                  setFormData({ ...formData, harga_beli_dus: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="harga_jual_dus">Harga Jual per Dus</Label>
+              <Input
+                id="harga_jual_dus"
+                type="number"
+                placeholder="Contoh: 170000"
+                value={formData.harga_jual_dus}
+                onChange={(e) =>
+                  setFormData({ ...formData, harga_jual_dus: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="harga_beli_pack">Harga Beli per Pack</Label>
+              <Input
+                id="harga_beli_pack"
+                type="number"
+                placeholder="Contoh: 13333"
+                value={formData.harga_beli_pack}
+                onChange={(e) =>
+                  setFormData({ ...formData, harga_beli_pack: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="harga_jual_pack">Harga Jual per Pack</Label>
+              <Input
+                id="harga_jual_pack"
+                type="number"
+                placeholder="Contoh: 14000"
+                value={formData.harga_jual_pack}
+                onChange={(e) =>
+                  setFormData({ ...formData, harga_jual_pack: e.target.value })
+                }
+              />
+            </div>
+
+            {formData.box_per_dus && formData.pcs_per_box && (
+              <div className="col-span-2 text-[10px] text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded border border-blue-200 dark:border-blue-800">
+                <div className="font-semibold mb-1">💡 Panduan Harga:</div>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Harga Beli/Jual Pcs: Harga untuk 1 pcs</li>
+                  <li>Harga Beli/Jual Pack: Harga untuk 1 pack ({formData.pcs_per_box} pcs)</li>
+                  <li>Harga Beli/Jual Dus: Harga untuk 1 dus ({parseInt(formData.box_per_dus) * parseInt(formData.pcs_per_box)} pcs)</li>
+                </ul>
+              </div>
+            )}
+
 
             {editMode && selectedProduct && formData.stok !== selectedProduct.stok.toString() && (
               <div className="col-span-2 space-y-2 mt-2 p-3 border border-warning/30 bg-warning/10 rounded-lg">

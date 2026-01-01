@@ -27,6 +27,9 @@ type Product = {
   id: number;
   nama_produk: string;
   stok: number;
+  harga_beli: number;
+  harga_beli_dus?: number;
+  harga_beli_pack?: number;
   box_per_dus?: number;
   pcs_per_box?: number;
 };
@@ -58,6 +61,24 @@ export function StockInForm() {
 
   const [totalPcs, setTotalPcs] = useState(0);
 
+  // Auto-populate price based on unit selection
+  useEffect(() => {
+    if (selectedProduct && formData.unit) {
+      let suggestedPrice = selectedProduct.harga_beli; // Default to Pcs price
+      
+      if (formData.unit === 'dus' && selectedProduct.harga_beli_dus) {
+        suggestedPrice = selectedProduct.harga_beli_dus;
+      } else if (formData.unit === 'pack' && selectedProduct.harga_beli_pack) {
+        suggestedPrice = selectedProduct.harga_beli_pack;
+      }
+      
+      // Only auto-fill if buyPrice is empty
+      if (!formData.buyPrice) {
+        setFormData(prev => ({ ...prev, buyPrice: suggestedPrice.toString() }));
+      }
+    }
+  }, [formData.unit, selectedProduct]);
+
   useEffect(() => {
     if (selectedProduct && formData.quantity) {
       const qty = parseInt(formData.quantity) || 0;
@@ -84,7 +105,7 @@ export function StockInForm() {
     setLoading(true);
     const { data } = await supabase
       .from('products')
-      .select('id, nama_produk, stok, box_per_dus, pcs_per_box')
+      .select('id, nama_produk, stok, harga_beli, harga_beli_dus, harga_beli_pack, box_per_dus, pcs_per_box')
       .order('nama_produk');
     setProducts(data || []);
     setLoading(false);
@@ -151,6 +172,8 @@ export function StockInForm() {
             product_id: productId,
             supplier_id: parseInt(formData.supplierId),
             qty: totalPcs,
+            unit: formData.unit, // Save unit used in transaction
+            harga_beli_per_unit: buyPrice, // Save price per unit for audit
             unit_transaksi: formData.unit,
             qty_transaksi: quantity,
             harga_beli: buyPrice,
