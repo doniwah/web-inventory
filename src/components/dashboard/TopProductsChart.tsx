@@ -1,4 +1,5 @@
 import { fetchTopProducts } from "@/services/dashboard";
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -9,10 +10,31 @@ export function TopProductsChart() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchTopProducts()
-      .then(setData)
-      .finally(() => setLoading(false));
+    loadData();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('top-products')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_out' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const loadData = async () => {
+    try {
+      const productsData = await fetchTopProducts();
+      setData(productsData);
+    } catch (error) {
+      console.error('Error loading top products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return <div className="h-[300px] flex items-center justify-center">Loading...</div>;

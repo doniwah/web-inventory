@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { mockProducts, mockBundles } from '@/data/mockData';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { logActivity } from '@/lib/activityLogger';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,27 +24,88 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PackageMinus, Calculator, Layers, Package } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+type Product = {
+  id: number;
+  nama_produk: string;
+  stok: number;
+  harga_jual: number;
+};
+
+type Bundle = {
+  id: number;
+  name: string;
+  harga_jual: number;
+  bundle_items: {
+    product_id: number;
+    qty: number;
+    products: {
+      nama_produk: string;
+      stok: number;
+    };
+  }[];
+};
+
 export function StockOutForm() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [type, setType] = useState<'product' | 'bundle'>('product');
+  
   const [formData, setFormData] = useState({
     itemId: '',
     quantity: '',
-    sellPrice: '',
     additionalCost: '',
     notes: '',
   });
 
-  const selectedProduct = mockProducts.find((p) => p.id === formData.itemId);
-  const selectedBundle = mockBundles.find((b) => b.id === formData.itemId);
+  const selectedProduct = products.find((p) => p.id === parseInt(formData.itemId));
+  const selectedBundle = bundles.find((b) => b.id === parseInt(formData.itemId));
   
   const sellPrice = type === 'product' 
-    ? (selectedProduct?.sellPrice || 0) 
-    : (selectedBundle?.sellPrice || 0);
+    ? (selectedProduct?.harga_jual || 0) 
+    : (selectedBundle?.harga_jual || 0);
   
   const totalPrice = Number(formData.quantity) * sellPrice;
   const additionalCost = Number(formData.additionalCost) || 0;
   const finalTotal = totalPrice - additionalCost;
+
+  useEffect(() => {
+    fetchProducts();
+    fetchBundles();
+  }, []);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('products')
+      .select('id, nama_produk, stok, harga_jual')
+      .order('nama_produk');
+    setProducts(data || []);
+    setLoading(false);
+  };
+
+  const fetchBundles = async () => {
+    const { data } = await supabase
+      .from('bundles')
+      .select(`
+        id,
+        name,
+        harga_jual,
+        bundle_items (
+          product_id,
+          qty,
+          products (
+            nama_produk,
+            stok
+          )
+        )
+      `)
+      .order('name');
+    setBundles(data || []);
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -52,25 +115,190 @@ export function StockOutForm() {
     }).format(value);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const itemName = type === 'product' ? selectedProduct?.name : selectedBundle?.name;
-    toast({
-      title: 'Barang Keluar Berhasil',
-      description: `${formData.quantity} pcs ${itemName} telah dicatat keluar.`,
-    });
+
+    if (!formData.itemId || !formData.quantity) {
+      toast({
+        title: 'Error',
+        description: 'Item dan jumlah wajib diisi',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const quantity = parseInt(formData.quantity);
+
+      if (type === 'product') {
+        // Handle product stock out
+        const productId = parseInt(formData.itemId);
+        
+        // Check stock availability
+        const { data: currentProduct, error: fetchError } = await supabase
+          .from('products')
+          .select('stok')
+          .eq('id', productId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        if (currentProduct.stok < quantity) {
+          toast({
+            title: 'Error',
+            description: `Stok tidak mencukupi. Stok tersedia: ${currentProduct.stok}`,
+            variant: 'destructive',
+          });
+          setSubmitting(false);
+          return;
+        }
+
+        // Update stock
+        const newStock = currentProduct.stok - quantity;
+        const { error: updateError } = await supabase
+          .from('products')
+          .update({ stok: newStock })
+          .eq('id', productId);
+
+        if (updateError) throw updateError;
+
+        // Insert transaction
+        const { error: transactionError } = await supabase
+          .from('stock_out')
+          .insert([
+            {
+              product_id: productId,
+              bundle_id: null,
+              qty: quantity,
+              harga_jual: sellPrice,
+              biaya_tambahan: additionalCost,
+              total_harga: finalTotal,
+              keterangan: formData.notes || null,
+              tanggal: new Date().toISOString(),
+            },
+          ]);
+
+        if (transactionError) throw transactionError;
+
+        // Log activity
+        await logActivity(
+          'stock_out',
+          `${quantity} pcs ${selectedProduct?.nama_produk} keluar`,
+          user?.id ? user.id : undefined
+        );
+
+        toast({
+          title: 'Barang Keluar Berhasil',
+          description: `${quantity} pcs ${selectedProduct?.nama_produk} telah dicatat keluar.`,
+        });
+      } else {
+        // Handle bundle stock out
+        const bundleId = parseInt(formData.itemId);
+        
+        if (!selectedBundle) throw new Error('Bundle not found');
+
+        // Check if all items in bundle have enough stock
+        for (const item of selectedBundle.bundle_items) {
+          const requiredQty = item.qty * quantity;
+          if (item.products.stok < requiredQty) {
+            toast({
+              title: 'Error',
+              description: `Stok ${item.products.nama_produk} tidak mencukupi. Dibutuhkan: ${requiredQty}, Tersedia: ${item.products.stok}`,
+              variant: 'destructive',
+            });
+            setSubmitting(false);
+            return;
+          }
+        }
+
+        // Update stock for all items in bundle
+        for (const item of selectedBundle.bundle_items) {
+          const requiredQty = item.qty * quantity;
+          const { data: currentProduct, error: fetchError } = await supabase
+            .from('products')
+            .select('stok')
+            .eq('id', item.product_id)
+            .single();
+
+          if (fetchError) throw fetchError;
+
+          const newStock = currentProduct.stok - requiredQty;
+          const { error: updateError } = await supabase
+            .from('products')
+            .update({ stok: newStock })
+            .eq('id', item.product_id);
+
+          if (updateError) throw updateError;
+        }
+
+        // Insert transaction
+        const { error: transactionError } = await supabase
+          .from('stock_out')
+          .insert([
+            {
+              product_id: null,
+              bundle_id: bundleId,
+              qty: quantity,
+              harga_jual: sellPrice,
+              biaya_tambahan: additionalCost,
+              total_harga: finalTotal,
+              keterangan: formData.notes || null,
+              tanggal: new Date().toISOString(),
+            },
+          ]);
+
+        if (transactionError) throw transactionError;
+
+        // Log activity
+        await logActivity(
+          'stock_out',
+          `${quantity} pcs bundle ${selectedBundle?.name} keluar`,
+          user?.id ? user.id : undefined
+        );
+
+        toast({
+          title: 'Barang Keluar Berhasil',
+          description: `${quantity} pcs ${selectedBundle?.name} telah dicatat keluar.`,
+        });
+      }
+
+      // Reset form
+      setFormData({
+        itemId: '',
+        quantity: '',
+        additionalCost: '',
+        notes: '',
+      });
+
+      // Refresh data
+      fetchProducts();
+      fetchBundles();
+    } catch (error: any) {
+      console.error('Error saving stock out:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Gagal menyimpan barang keluar',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReset = () => {
     setFormData({
       itemId: '',
       quantity: '',
-      sellPrice: '',
       additionalCost: '',
       notes: '',
     });
   };
 
-  const getProductName = (productId: string) => {
-    return mockProducts.find((p) => p.id === productId)?.name || '-';
-  };
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Memuat data...</p>;
+  }
 
   return (
     <Card className="max-w-2xl">
@@ -115,9 +343,9 @@ export function StockOutForm() {
                     <SelectValue placeholder="Pilih produk" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockProducts.map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name} (Stok: {product.stock})
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id.toString()}>
+                        {product.nama_produk} (Stok: {product.stok})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -138,9 +366,9 @@ export function StockOutForm() {
                     <SelectValue placeholder="Pilih bundling" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockBundles.map((bundle) => (
-                      <SelectItem key={bundle.id} value={bundle.id}>
-                        {bundle.name} - {formatCurrency(bundle.sellPrice)}
+                    {bundles.map((bundle) => (
+                      <SelectItem key={bundle.id} value={bundle.id.toString()}>
+                        {bundle.name} - {formatCurrency(bundle.harga_jual)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -153,10 +381,10 @@ export function StockOutForm() {
                     Isi Bundle
                   </p>
                   <div className="space-y-1">
-                    {selectedBundle.items.map((item) => (
-                      <div key={item.productId} className="flex justify-between text-sm">
-                        <span>{getProductName(item.productId)}</span>
-                        <span className="text-muted-foreground">×{item.quantity}</span>
+                    {selectedBundle.bundle_items.map((item) => (
+                      <div key={item.product_id} className="flex justify-between text-sm">
+                        <span>{item.products.nama_produk}</span>
+                        <span className="text-muted-foreground">×{item.qty}</span>
                       </div>
                     ))}
                   </div>
@@ -241,11 +469,21 @@ export function StockOutForm() {
             )}
 
             <div className="flex gap-3 pt-2">
-              <Button type="button" variant="outline" className="flex-1">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex-1"
+                onClick={handleReset}
+                disabled={submitting}
+              >
                 Batal
               </Button>
-              <Button type="submit" className="flex-1 bg-chart-2 hover:bg-chart-2/90 text-primary-foreground border-0">
-                Simpan Barang Keluar
+              <Button 
+                type="submit" 
+                className="flex-1 bg-chart-2 hover:bg-chart-2/90 text-primary-foreground border-0"
+                disabled={submitting}
+              >
+                {submitting ? 'Menyimpan...' : 'Simpan Barang Keluar'}
               </Button>
             </div>
           </form>

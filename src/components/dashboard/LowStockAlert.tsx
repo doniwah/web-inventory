@@ -16,12 +16,20 @@ export function LowStockAlert() {
 
   useEffect(() => {
     const fetchLowStock = async () => {
-      const { data, error } = await supabase.from("products").select("id, nama_produk, stok, stok_minimum").lte("stok", supabase.raw("stok_minimum")); // stok <= stok_minimum
+      // Fetch all products and filter client-side since Supabase doesn't support column-to-column comparison directly
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, nama_produk, stok, stok_minimum")
+        .order("stok", { ascending: true });
 
       if (error) {
         console.error("Gagal ambil data stok menipis:", error);
       } else {
-        setProducts(data ?? []);
+        // Filter products where stok <= stok_minimum
+        const lowStockProducts = (data ?? []).filter(
+          (product) => product.stok <= product.stok_minimum
+        );
+        setProducts(lowStockProducts);
       }
 
       setLoading(false);

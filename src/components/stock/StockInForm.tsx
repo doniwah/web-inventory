@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { mockProducts, mockSuppliers } from '@/data/mockData';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { logActivity } from '@/lib/activityLogger';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,8 +23,25 @@ import {
 import { PackagePlus, Calculator } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+type Product = {
+  id: number;
+  nama_produk: string;
+  stok: number;
+};
+
+type Supplier = {
+  id: number;
+  nama_supplier: string;
+};
+
 export function StockInForm() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  
   const [formData, setFormData] = useState({
     productId: '',
     supplierId: '',
@@ -31,8 +50,31 @@ export function StockInForm() {
     notes: '',
   });
 
-  const selectedProduct = mockProducts.find((p) => p.id === formData.productId);
+  const selectedProduct = products.find((p) => p.id === parseInt(formData.productId));
   const totalPrice = Number(formData.quantity) * Number(formData.buyPrice);
+
+  useEffect(() => {
+    fetchProducts();
+    fetchSuppliers();
+  }, []);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('products')
+      .select('id, nama_produk, stok')
+      .order('nama_produk');
+    setProducts(data || []);
+    setLoading(false);
+  };
+
+  const fetchSuppliers = async () => {
+    const { data } = await supabase
+      .from('suppliers')
+      .select('id, nama_supplier')
+      .order('nama_supplier');
+    setSuppliers(data || []);
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -42,12 +84,97 @@ export function StockInForm() {
     }).format(value);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: 'Barang Masuk Berhasil',
-      description: `${formData.quantity} pcs ${selectedProduct?.name} telah ditambahkan ke stok.`,
-    });
+
+    if (!formData.productId || !formData.supplierId || !formData.quantity || !formData.buyPrice) {
+      toast({
+        title: 'Error',
+        description: 'Semua field wajib diisi',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const productId = parseInt(formData.productId);
+      const quantity = parseInt(formData.quantity);
+      const buyPrice = parseInt(formData.buyPrice);
+
+      // 1. Update stock produk
+      const { data: currentProduct, error: fetchError } = await supabase
+        .from('products')
+        .select('stok')
+        .eq('id', productId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const newStock = currentProduct.stok + quantity;
+
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ stok: newStock })
+        .eq('id', productId);
+
+      if (updateError) throw updateError;
+
+      // 2. Insert transaksi barang masuk
+      const { error: transactionError } = await supabase
+        .from('stock_in')
+        .insert([
+          {
+            product_id: productId,
+            supplier_id: parseInt(formData.supplierId),
+            qty: quantity,
+            harga_beli: buyPrice,
+            total_harga: totalPrice,
+            keterangan: formData.notes || null,
+            tanggal: new Date().toISOString(),
+          },
+        ]);
+
+      if (transactionError) throw transactionError;
+
+      // Log activity
+      const supplierName = suppliers.find(s => s.id === parseInt(formData.supplierId))?.nama_supplier || 'Unknown';
+      await logActivity(
+        'stock_in',
+        `${quantity} pcs ${selectedProduct?.nama_produk} dari ${supplierName}`,
+        user?.id ? user.id : undefined
+      );
+
+      toast({
+        title: 'Barang Masuk Berhasil',
+        description: `${quantity} pcs ${selectedProduct?.nama_produk} telah ditambahkan ke stok.`,
+      });
+
+      // Reset form
+      setFormData({
+        productId: '',
+        supplierId: '',
+        quantity: '',
+        buyPrice: '',
+        notes: '',
+      });
+
+      // Refresh products to show updated stock
+      fetchProducts();
+    } catch (error: any) {
+      console.error('Error saving stock in:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Gagal menyimpan barang masuk',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReset = () => {
     setFormData({
       productId: '',
       supplierId: '',
@@ -56,6 +183,10 @@ export function StockInForm() {
       notes: '',
     });
   };
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Memuat data...</p>;
+  }
 
   return (
     <Card className="max-w-2xl">
@@ -85,9 +216,9 @@ export function StockInForm() {
                   <SelectValue placeholder="Pilih produk" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockProducts.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.name} (Stok: {product.stock})
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id.toString()}>
+                      {product.nama_produk} (Stok: {product.stok})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -106,9 +237,9 @@ export function StockInForm() {
                   <SelectValue placeholder="Pilih supplier" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockSuppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.id}>
-                      {supplier.name}
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                      {supplier.nama_supplier}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -183,11 +314,21 @@ export function StockInForm() {
           )}
 
           <div className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" className="flex-1">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="flex-1"
+              onClick={handleReset}
+              disabled={submitting}
+            >
               Batal
             </Button>
-            <Button type="submit" className="flex-1 gradient-primary text-primary-foreground border-0">
-              Simpan Barang Masuk
+            <Button 
+              type="submit" 
+              className="flex-1 gradient-primary text-primary-foreground border-0"
+              disabled={submitting}
+            >
+              {submitting ? 'Menyimpan...' : 'Simpan Barang Masuk'}
             </Button>
           </div>
         </form>

@@ -1,4 +1,5 @@
 import { fetchStockFlow } from "@/services/dashboard";
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -7,10 +8,39 @@ export function StockFlowChart() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchStockFlow()
-      .then(setData)
-      .finally(() => setLoading(false));
+    loadData();
+
+    // Real-time subscription
+    const stockInChannel = supabase
+      .channel('stock-flow-in')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_in' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    const stockOutChannel = supabase
+      .channel('stock-flow-out')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_out' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(stockInChannel);
+      supabase.removeChannel(stockOutChannel);
+    };
   }, []);
+
+  const loadData = async () => {
+    try {
+      const flowData = await fetchStockFlow();
+      setData(flowData);
+    } catch (error) {
+      console.error('Error loading stock flow:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return <div className="h-[300px] flex items-center justify-center">Loading...</div>;

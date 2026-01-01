@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { mockActivityLogs } from '@/data/mockData';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import {
   Table,
   TableBody,
@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -29,6 +30,14 @@ import {
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+
+type ActivityLog = {
+  id: number;
+  type: 'stock_in' | 'stock_out' | 'adjustment' | 'price_change' | 'product_create' | 'bundle_create';
+  description: string;
+  user_name: string;
+  timestamp: Date;
+};
 
 const typeConfig = {
   stock_in: { 
@@ -66,13 +75,112 @@ const typeConfig = {
 export function ActivityHistory() {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 10;
 
-  const filteredLogs = mockActivityLogs.filter((log) => {
-    const matchesSearch = log.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.userName.toLowerCase().includes(searchQuery.toLowerCase());
+  useEffect(() => {
+    fetchActivityLogs();
+  }, [page]);
+
+  const fetchActivityLogs = async () => {
+    setLoading(true);
+    try {
+      const from = (page - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      // Get total count first
+      const { count } = await supabase
+        .from('activity_logs')
+        .select('*', { count: 'exact', head: true });
+
+      if (count) {
+        setTotalPages(Math.ceil(count / PAGE_SIZE));
+      }
+
+      // First try with user join
+      let { data, error } = await supabase
+        .from('activity_logs')
+        .select(`
+          id, 
+          type, 
+          aktivitas,
+          created_at,
+          user_id,
+          users!user_id (name)
+        `)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      // If join fails, try without join and fetch users separately
+      if (error) {
+        console.log('Trying without user join...', error);
+        const result = await supabase
+          .from('activity_logs')
+          .select('id, type, aktivitas, created_at, user_id')
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        
+        data = result.data;
+        error = result.error;
+
+        // Fetch user names separately if we have user_ids
+        if (data && data.length > 0) {
+          const userIds = [...new Set(data.map((item: any) => item.user_id).filter(Boolean))];
+          if (userIds.length > 0) {
+            const { data: usersData } = await supabase
+              .from('users')
+              .select('id, name')
+              .in('id', userIds);
+
+            // Map user names to activities
+            if (usersData) {
+              const userMap = new Map(usersData.map((u: any) => [u.id, u.name]));
+              data = data.map((item: any) => ({
+                ...item,
+                users: item.user_id ? { name: userMap.get(item.user_id) } : null
+              }));
+            }
+          }
+        }
+      }
+
+      if (error) {
+        console.error('Error fetching activity logs:', error);
+        throw error;
+      }
+
+      if (data) {
+        const activities: ActivityLog[] = data.map((item: any) => ({
+          id: item.id,
+          type: item.type || 'stock_in',
+          description: item.aktivitas || 'No description',
+          user_name: item.users?.name || 'System',
+          timestamp: new Date(item.created_at),
+        }));
+
+        setLogs(activities);
+      }
+    } catch (error) {
+      console.error('Error fetching activity logs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredLogs = logs.filter((log) => {
+    const matchesSearch = 
+      log.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.user_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'all' || log.type === typeFilter;
     return matchesSearch && matchesType;
   });
+
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Memuat data...</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -118,39 +226,71 @@ export function ActivityHistory() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredLogs.map((log, index) => {
-              const config = typeConfig[log.type];
-              const Icon = config.icon;
+            {filteredLogs.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                  Tidak ada data aktivitas
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredLogs.map((log, index) => {
+                // Fallback to 'adjustment' if type is not found in config
+                const config = typeConfig[log.type] || typeConfig.adjustment;
+                const Icon = config.icon;
 
-              return (
-                <TableRow 
-                  key={log.id}
-                  className="animate-fade-in"
-                  style={{ animationDelay: `${index * 30}ms` }}
-                >
-                  <TableCell>
-                    <Badge 
-                      variant="outline" 
-                      className={cn('gap-1.5', config.color)}
-                    >
-                      <Icon className="h-3 w-3" />
-                      {config.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-medium text-foreground">
-                    {log.description}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {log.userName}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {format(log.timestamp, 'dd MMM yyyy, HH:mm', { locale: id })}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                return (
+                  <TableRow 
+                    key={log.id}
+                    className="animate-fade-in"
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <TableCell>
+                      <Badge 
+                        variant="outline" 
+                        className={cn('gap-1.5', config.color)}
+                      >
+                        <Icon className="h-3 w-3" />
+                        {config.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      {log.description}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {log.user_name}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {format(log.timestamp, 'dd MMM yyyy, HH:mm', { locale: id })}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Halaman {page} dari {totalPages}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            disabled={page === 1 || loading}
+            onClick={() => setPage(p => p - 1)}
+          >
+            Prev
+          </Button>
+          <Button
+            variant="outline"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage(p => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
   );

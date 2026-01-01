@@ -1,10 +1,12 @@
+import { useEffect, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { StockFlowChart } from '@/components/dashboard/StockFlowChart';
 import { TopProductsChart } from '@/components/dashboard/TopProductsChart';
 import { LowStockAlert } from '@/components/dashboard/LowStockAlert';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
-import { mockDashboardMetrics } from '@/data/mockData';
+import { fetchDashboardMetrics, DashboardMetrics } from '@/services/dashboard';
+import { supabase } from '@/lib/supabase';
 import { 
   Package, 
   Boxes, 
@@ -24,7 +26,71 @@ const formatCurrency = (value: number) => {
 };
 
 const Index = () => {
-  const metrics = mockDashboardMetrics;
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadMetrics();
+
+    // Set up real-time subscriptions for auto-update
+    const productsChannel = supabase
+      .channel('products-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        loadMetrics();
+      })
+      .subscribe();
+
+    const stockInChannel = supabase
+      .channel('stock-in-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_in' }, () => {
+        loadMetrics();
+      })
+      .subscribe();
+
+    const stockOutChannel = supabase
+      .channel('stock-out-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_out' }, () => {
+        loadMetrics();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(productsChannel);
+      supabase.removeChannel(stockInChannel);
+      supabase.removeChannel(stockOutChannel);
+    };
+  }, []);
+
+  const loadMetrics = async () => {
+    try {
+      const data = await fetchDashboardMetrics();
+      setMetrics(data);
+    } catch (error) {
+      console.error('Error loading metrics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <MainLayout title="Dashboard" subtitle="Memuat data...">
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Memuat dashboard...</p>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!metrics) {
+    return (
+      <MainLayout title="Dashboard" subtitle="Error loading data">
+        <div className="flex items-center justify-center h-64">
+          <p className="text-destructive">Gagal memuat data dashboard</p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 
@@ -44,14 +110,12 @@ const Index = () => {
             title="Total Stok"
             value={`${metrics.totalStock.toLocaleString()} pcs`}
             icon={<Boxes className="h-6 w-6" />}
-            trend={{ value: 12.5, isPositive: true }}
           />
           <MetricCard
             title="Nilai Aset"
             value={formatCurrency(metrics.totalAssetValue)}
             icon={<Wallet className="h-6 w-6" />}
             variant="success"
-            trend={{ value: 8.3, isPositive: true }}
           />
           <MetricCard
             title="Stok Menipis"
@@ -108,6 +172,46 @@ const Index = () => {
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
                 <TrendingUp className="h-5 w-5 text-success" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Average Sales Metrics */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Rata-rata Terjual</p>
+                <p className="text-2xl font-bold text-foreground">{metrics.averageSales.daily} pcs</p>
+                <p className="text-xs text-muted-foreground">1 hari terakhir</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-1/10">
+                <TrendingUp className="h-5 w-5 text-chart-1" />
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Rata-rata Terjual</p>
+                <p className="text-2xl font-bold text-foreground">{metrics.averageSales.weekly} pcs/hari</p>
+                <p className="text-xs text-muted-foreground">7 hari terakhir</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-3/10">
+                <TrendingUp className="h-5 w-5 text-chart-3" />
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Rata-rata Terjual</p>
+                <p className="text-2xl font-bold text-foreground">{metrics.averageSales.monthly} pcs/hari</p>
+                <p className="text-xs text-muted-foreground">30 hari terakhir</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-5/10">
+                <TrendingUp className="h-5 w-5 text-chart-5" />
               </div>
             </div>
           </div>
