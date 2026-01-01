@@ -79,15 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("❌ Error fetching user data:", error);
-        
-        // TEMPORARY: Use mock data if query fails
-        console.warn('⚠️ Using mock data for testing');
-        return {
-          id: authUser.id,
-          name: 'Administrator',
-          email: authUser.email || 'admin@stockbundle.com',
-          role: 'admin' as UserRole,
-        };
+        return null;
       }
 
       if (!data) {
@@ -99,15 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return data as AuthUser;
     } catch (error) {
       console.error("❌ Fetch user data failed:", error);
-      
-      // TEMPORARY: Use mock data on timeout
-      console.warn('⚠️ Using mock data due to timeout');
-      return {
-        id: authUser.id,
-        name: 'Administrator',
-        email: authUser.email || 'admin@stockbundle.com',
-        role: 'admin' as UserRole,
-      };
+      return null;
     } finally {
       fetchingRef.current = false;
     }
@@ -195,9 +179,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
             const userData = await fetchUserData(session.user);
-            if (userData) {
+            if (userData && userData.id === session.user.id) {
               setUser(userData);
               console.log('✅ User data successfully synced');
+            } else {
+              console.warn('⚠️ User data sync failed or returned invalid data');
             }
           }
         }
