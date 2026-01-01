@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { startOfMonth } from 'date-fns';
 
 export interface AverageSales {
   daily: { product: number; bundle: number };

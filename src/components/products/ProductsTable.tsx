@@ -54,6 +54,8 @@ type Product = {
   harga_jual: number;
   stok: number;
   stok_minimum: number;
+  box_per_dus?: number;
+  pcs_per_box?: number;
   supplier_id?: number;
   satuan_id?: number;
   suppliers?: { nama_supplier: string } | null;
@@ -95,6 +97,8 @@ export function ProductsTable() {
     harga_jual: "",
     stok: "",
     stok_minimum: "",
+    box_per_dus: "",
+    pcs_per_box: "",
     supplier_id: "",
     satuan_id: "",
   });
@@ -110,7 +114,8 @@ export function ProductsTable() {
       .from("products")
       .select(
         `
-          id, nama_produk, harga_beli, harga_jual, stok, stok_minimum, supplier_id, satuan_id,
+          id, nama_produk, harga_beli, harga_jual, stok, stok_minimum, 
+          box_per_dus, pcs_per_box, supplier_id, satuan_id,
           suppliers!supplier_id ( nama_supplier ),
           satuans!satuan_id ( nama_satuan )
         `
@@ -181,6 +186,8 @@ export function ProductsTable() {
         harga_jual: product.harga_jual.toString(),
         stok: product.stok.toString(),
         stok_minimum: product.stok_minimum.toString(),
+        box_per_dus: product.box_per_dus?.toString() || "",
+        pcs_per_box: product.pcs_per_box?.toString() || "",
         supplier_id: product.supplier_id?.toString() || "",
         satuan_id: product.satuan_id?.toString() || "",
       });
@@ -193,6 +200,8 @@ export function ProductsTable() {
         harga_jual: "",
         stok: "",
         stok_minimum: "",
+        box_per_dus: "",
+        pcs_per_box: "",
         supplier_id: "",
         satuan_id: "",
       });
@@ -219,6 +228,8 @@ export function ProductsTable() {
         harga_jual: parseInt(formData.harga_jual),
         stok: parseInt(formData.stok) || 0,
         stok_minimum: parseInt(formData.stok_minimum) || 0,
+        box_per_dus: formData.box_per_dus ? parseInt(formData.box_per_dus) : null,
+        pcs_per_box: formData.pcs_per_box ? parseInt(formData.pcs_per_box) : null,
         supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
         satuan_id: formData.satuan_id ? parseInt(formData.satuan_id) : null,
       };
@@ -341,6 +352,24 @@ export function ProductsTable() {
     p.nama_produk.toLowerCase().includes(search.toLowerCase())
   );
 
+  const formatStock = (totalPcs: number, boxPerDus?: number, pcsPerBox?: number) => {
+    if (!boxPerDus || !pcsPerBox) return `${totalPcs} Pcs`;
+
+    const pcsInDus = boxPerDus * pcsPerBox;
+    const dus = Math.floor(totalPcs / pcsInDus);
+    const remainingAfterDus = totalPcs % pcsInDus;
+    
+    const box = Math.floor(remainingAfterDus / pcsPerBox);
+    const pcs = remainingAfterDus % pcsPerBox;
+
+    const parts = [];
+    if (dus > 0) parts.push(`${dus} Dus`);
+    if (box > 0) parts.push(`${box} Box`);
+    if (pcs > 0 || parts.length === 0) parts.push(`${pcs} Pcs`);
+
+    return parts.join(', ');
+  };
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">Memuat produk...</p>;
   }
@@ -404,7 +433,12 @@ export function ProductsTable() {
                 <TableCell className="text-right">
                   Rp {p.harga_jual.toLocaleString()}
                 </TableCell>
-                <TableCell className="text-center">{p.stok}</TableCell>
+                <TableCell className="text-center font-medium">
+                  {formatStock(p.stok, p.box_per_dus, p.pcs_per_box)}
+                  <div className="text-[10px] text-muted-foreground font-normal">
+                    Total: {p.stok} Pcs
+                  </div>
+                </TableCell>
                 <TableCell>
                   {p.stok === 0 ? (
                     <Badge variant="destructive">Habis</Badge>
@@ -569,7 +603,7 @@ export function ProductsTable() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="stok_minimum">Stok Minimum</Label>
+              <Label htmlFor="stok_minimum">Stok Minimum (Pcs)</Label>
               <Input
                 id="stok_minimum"
                 type="number"
@@ -580,6 +614,43 @@ export function ProductsTable() {
                 }
               />
             </div>
+
+            <hr className="col-span-2 my-2" />
+            <div className="col-span-2">
+              <h4 className="text-sm font-semibold mb-2">Konversi Satuan</h4>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="box_per_dus">1 Dus Berapa Box?</Label>
+              <Input
+                id="box_per_dus"
+                type="number"
+                placeholder="Contoh: 12"
+                value={formData.box_per_dus}
+                onChange={(e) =>
+                  setFormData({ ...formData, box_per_dus: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pcs_per_box">1 Box Berapa Pcs?</Label>
+              <Input
+                id="pcs_per_box"
+                type="number"
+                placeholder="Contoh: 12"
+                value={formData.pcs_per_box}
+                onChange={(e) =>
+                  setFormData({ ...formData, pcs_per_box: e.target.value })
+                }
+              />
+            </div>
+            
+            {formData.box_per_dus && formData.pcs_per_box && (
+              <div className="col-span-2 text-[10px] text-muted-foreground bg-secondary/30 p-2 rounded">
+                Info: 1 Dus = {parseInt(formData.box_per_dus) * parseInt(formData.pcs_per_box)} Pcs
+              </div>
+            )}
           </div>
 
           <DialogFooter>

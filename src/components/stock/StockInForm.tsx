@@ -27,6 +27,8 @@ type Product = {
   id: number;
   nama_produk: string;
   stok: number;
+  box_per_dus?: number;
+  pcs_per_box?: number;
 };
 
 type Supplier = {
@@ -46,12 +48,32 @@ export function StockInForm() {
     productId: '',
     supplierId: '',
     quantity: '',
+    unit: 'pcs',
     buyPrice: '',
     notes: '',
   });
 
   const selectedProduct = products.find((p) => p.id === parseInt(formData.productId));
   const totalPrice = Number(formData.quantity) * Number(formData.buyPrice);
+
+  const [totalPcs, setTotalPcs] = useState(0);
+
+  useEffect(() => {
+    if (selectedProduct && formData.quantity) {
+      const qty = parseInt(formData.quantity) || 0;
+      let calculatedPcs = qty;
+
+      if (formData.unit === 'dus') {
+        calculatedPcs = qty * (selectedProduct.box_per_dus || 1) * (selectedProduct.pcs_per_box || 1);
+      } else if (formData.unit === 'box') {
+        calculatedPcs = qty * (selectedProduct.pcs_per_box || 1);
+      }
+
+      setTotalPcs(calculatedPcs);
+    } else {
+      setTotalPcs(0);
+    }
+  }, [formData.quantity, formData.unit, selectedProduct]);
 
   useEffect(() => {
     fetchProducts();
@@ -62,7 +84,7 @@ export function StockInForm() {
     setLoading(true);
     const { data } = await supabase
       .from('products')
-      .select('id, nama_produk, stok')
+      .select('id, nama_produk, stok, box_per_dus, pcs_per_box')
       .order('nama_produk');
     setProducts(data || []);
     setLoading(false);
@@ -111,8 +133,8 @@ export function StockInForm() {
         .single();
 
       if (fetchError) throw fetchError;
-
-      const newStock = currentProduct.stok + quantity;
+      
+      const newStock = currentProduct.stok + totalPcs;
 
       const { error: updateError } = await supabase
         .from('products')
@@ -128,7 +150,9 @@ export function StockInForm() {
           {
             product_id: productId,
             supplier_id: parseInt(formData.supplierId),
-            qty: quantity,
+            qty: totalPcs,
+            unit_transaksi: formData.unit,
+            qty_transaksi: quantity,
             harga_beli: buyPrice,
             total_harga: totalPrice,
             keterangan: formData.notes || null,
@@ -142,7 +166,7 @@ export function StockInForm() {
       const supplierName = suppliers.find(s => s.id === parseInt(formData.supplierId))?.nama_supplier || 'Unknown';
       await logActivity(
         'stock_in',
-        `${quantity} pcs ${selectedProduct?.nama_produk} dari ${supplierName}`,
+        `${formData.quantity} ${formData.unit} (${totalPcs} pcs) ${selectedProduct?.nama_produk} dari ${supplierName}`,
         user?.id ? user.id : undefined
       );
 
@@ -156,6 +180,7 @@ export function StockInForm() {
         productId: '',
         supplierId: '',
         quantity: '',
+        unit: 'pcs',
         buyPrice: '',
         notes: '',
       });
@@ -179,6 +204,7 @@ export function StockInForm() {
       productId: '',
       supplierId: '',
       quantity: '',
+      unit: 'pcs',
       buyPrice: '',
       notes: '',
     });
@@ -247,35 +273,58 @@ export function StockInForm() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="quantity">Jumlah *</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min="1"
-                placeholder="Masukkan jumlah"
-                value={formData.quantity}
-                onChange={(e) =>
-                  setFormData({ ...formData, quantity: e.target.value })
-                }
-              />
-            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Jumlah *</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={formData.quantity}
+                    onChange={(e) =>
+                      setFormData({ ...formData, quantity: e.target.value })
+                    }
+                    className="flex-1"
+                  />
+                  <Select
+                    value={formData.unit}
+                    onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                  >
+                    <SelectTrigger className="w-[100px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pcs">Pcs</SelectItem>
+                      <SelectItem value="box" disabled={!selectedProduct?.pcs_per_box}>Box</SelectItem>
+                      <SelectItem value="dus" disabled={!selectedProduct?.box_per_dus}>Dus</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedProduct && formData.unit !== 'pcs' && (
+                  <p className="text-[10px] text-muted-foreground italic">
+                    Konversi: {formData.unit === 'dus' 
+                      ? `1 Dus = ${(selectedProduct.box_per_dus || 1) * (selectedProduct.pcs_per_box || 1)} Pcs` 
+                      : `1 Box = ${selectedProduct.pcs_per_box || 1} Pcs`}
+                  </p>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="buyPrice">Harga Beli / pcs *</Label>
-              <Input
-                id="buyPrice"
-                type="number"
-                min="0"
-                placeholder="Masukkan harga"
-                value={formData.buyPrice}
-                onChange={(e) =>
-                  setFormData({ ...formData, buyPrice: e.target.value })
-                }
-              />
+              <div className="space-y-2">
+                <Label htmlFor="buyPrice">Harga Beli / unit *</Label>
+                <Input
+                  id="buyPrice"
+                  type="number"
+                  min="0"
+                  placeholder="Masukkan harga"
+                  value={formData.buyPrice}
+                  onChange={(e) =>
+                    setFormData({ ...formData, buyPrice: e.target.value })
+                  }
+                />
+              </div>
             </div>
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="notes">Catatan</Label>
@@ -298,15 +347,21 @@ export function StockInForm() {
               </div>
               <div className="grid gap-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Jumlah</span>
-                  <span className="font-medium">{formData.quantity} pcs</span>
+                  <span className="text-muted-foreground">Jumlah Input</span>
+                  <span className="font-medium">{formData.quantity} {formData.unit}</span>
                 </div>
+                {formData.unit !== 'pcs' && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Stok (Pcs)</span>
+                    <span className="font-medium text-primary">+{totalPcs} Pcs</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Harga per pcs</span>
+                  <span className="text-muted-foreground">Harga per {formData.unit}</span>
                   <span className="font-medium">{formatCurrency(Number(formData.buyPrice))}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 mt-2">
-                  <span className="font-medium">Total</span>
+                  <span className="font-medium">Total Bayar</span>
                   <span className="text-lg font-bold text-primary">{formatCurrency(totalPrice)}</span>
                 </div>
               </div>

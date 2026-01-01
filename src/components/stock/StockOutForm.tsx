@@ -29,6 +29,8 @@ type Product = {
   nama_produk: string;
   stok: number;
   harga_jual: number;
+  box_per_dus?: number;
+  pcs_per_box?: number;
 };
 
 type Bundle = {
@@ -57,6 +59,7 @@ export function StockOutForm() {
   const [formData, setFormData] = useState({
     itemId: '',
     quantity: '',
+    unit: 'pcs',
     additionalCost: '',
     notes: '',
   });
@@ -72,6 +75,27 @@ export function StockOutForm() {
   const additionalCost = Number(formData.additionalCost) || 0;
   const finalTotal = totalPrice - additionalCost;
 
+  const [totalPcs, setTotalPcs] = useState(0);
+
+  useEffect(() => {
+    if (type === 'product' && selectedProduct && formData.quantity) {
+      const qty = parseInt(formData.quantity) || 0;
+      let calculatedPcs = qty;
+
+      if (formData.unit === 'dus') {
+        calculatedPcs = qty * (selectedProduct.box_per_dus || 1) * (selectedProduct.pcs_per_box || 1);
+      } else if (formData.unit === 'box') {
+        calculatedPcs = qty * (selectedProduct.pcs_per_box || 1);
+      }
+
+      setTotalPcs(calculatedPcs);
+    } else if (type === 'bundle' && formData.quantity) {
+      setTotalPcs(parseInt(formData.quantity) || 0);
+    } else {
+      setTotalPcs(0);
+    }
+  }, [formData.quantity, formData.unit, selectedProduct, type]);
+
   useEffect(() => {
     fetchProducts();
     fetchBundles();
@@ -81,7 +105,7 @@ export function StockOutForm() {
     setLoading(true);
     const { data } = await supabase
       .from('products')
-      .select('id, nama_produk, stok, harga_jual')
+      .select('id, nama_produk, stok, harga_jual, box_per_dus, pcs_per_box')
       .order('nama_produk');
     setProducts(data || []);
     setLoading(false);
@@ -145,10 +169,10 @@ export function StockOutForm() {
 
         if (fetchError) throw fetchError;
 
-        if (currentProduct.stok < quantity) {
+        if (currentProduct.stok < totalPcs) {
           toast({
             title: 'Error',
-            description: `Stok tidak mencukupi. Stok tersedia: ${currentProduct.stok}`,
+            description: `Stok tidak mencukupi. Stok tersedia: ${currentProduct.stok} pcs`,
             variant: 'destructive',
           });
           setSubmitting(false);
@@ -156,7 +180,7 @@ export function StockOutForm() {
         }
 
         // Update stock
-        const newStock = currentProduct.stok - quantity;
+        const newStock = currentProduct.stok - totalPcs;
         const { error: updateError } = await supabase
           .from('products')
           .update({ stok: newStock })
@@ -171,7 +195,9 @@ export function StockOutForm() {
             {
               product_id: productId,
               bundle_id: null,
-              qty: quantity,
+              qty: totalPcs,
+              unit_transaksi: formData.unit,
+              qty_transaksi: quantity,
               harga_jual: sellPrice,
               biaya_tambahan: additionalCost,
               total_harga: finalTotal,
@@ -185,13 +211,13 @@ export function StockOutForm() {
         // Log activity
         await logActivity(
           'stock_out',
-          `${quantity} pcs ${selectedProduct?.nama_produk} keluar`,
+          `${formData.quantity} ${formData.unit} (${totalPcs} pcs) ${selectedProduct?.nama_produk} keluar`,
           user?.id ? user.id : undefined
         );
 
         toast({
           title: 'Barang Keluar Berhasil',
-          description: `${quantity} pcs ${selectedProduct?.nama_produk} telah dicatat keluar.`,
+          description: `${formData.quantity} ${formData.unit} ${selectedProduct?.nama_produk} telah dicatat keluar.`,
         });
       } else {
         // Handle bundle stock out
@@ -268,6 +294,7 @@ export function StockOutForm() {
       setFormData({
         itemId: '',
         quantity: '',
+        unit: 'pcs',
         additionalCost: '',
         notes: '',
       });
@@ -395,16 +422,46 @@ export function StockOutForm() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="quantity">Jumlah *</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  placeholder="Masukkan jumlah"
-                  value={formData.quantity}
-                  onChange={(e) =>
-                    setFormData({ ...formData, quantity: e.target.value })
-                  }
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={formData.quantity}
+                    onChange={(e) =>
+                      setFormData({ ...formData, quantity: e.target.value })
+                    }
+                    className="flex-1"
+                  />
+                  {type === 'product' && (
+                    <Select
+                      value={formData.unit}
+                      onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                    >
+                      <SelectTrigger className="w-[100px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pcs">Pcs</SelectItem>
+                        <SelectItem value="box" disabled={!selectedProduct?.pcs_per_box}>Box</SelectItem>
+                        <SelectItem value="dus" disabled={!selectedProduct?.box_per_dus}>Dus</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {type === 'bundle' && (
+                    <div className="flex items-center justify-center w-[100px] border rounded bg-muted text-sm px-3">
+                      Pcs
+                    </div>
+                  )}
+                </div>
+                {selectedProduct && type === 'product' && formData.unit !== 'pcs' && (
+                  <p className="text-[10px] text-muted-foreground italic">
+                    Konversi: {formData.unit === 'dus' 
+                      ? `1 Dus = ${(selectedProduct.box_per_dus || 1) * (selectedProduct.pcs_per_box || 1)} Pcs` 
+                      : `1 Box = ${selectedProduct.pcs_per_box || 1} Pcs`}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -443,11 +500,17 @@ export function StockOutForm() {
                 </div>
                 <div className="grid gap-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Jumlah</span>
-                    <span className="font-medium">{formData.quantity} pcs</span>
+                    <span className="text-muted-foreground">Jumlah Input</span>
+                    <span className="font-medium">{formData.quantity} {formData.unit}</span>
                   </div>
+                  {type === 'product' && formData.unit !== 'pcs' && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Stok (Pcs)</span>
+                      <span className="font-medium text-chart-2">-{totalPcs} Pcs</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Harga per pcs</span>
+                    <span className="text-muted-foreground">Harga per {formData.unit}</span>
                     <span className="font-medium">{formatCurrency(sellPrice)}</span>
                   </div>
                   <div className="flex justify-between">
