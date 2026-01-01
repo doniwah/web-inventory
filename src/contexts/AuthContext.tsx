@@ -14,6 +14,7 @@ export interface UserPermissions {
   suppliers: boolean;
   users: boolean;
   settings: boolean;
+  dashboard: boolean;
 }
 
 export interface AuthUser {

@@ -33,7 +33,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'owner'], permission: 'dashboard' },
   { title: 'Produk', href: '/products', icon: Package, roles: ['admin', 'owner'], permission: 'products' },
   { title: 'Bundling', href: '/bundles', icon: Layers, roles: ['admin', 'owner'], permission: 'bundles' },
   { title: 'Barang Masuk', href: '/stock-in', icon: PackagePlus, roles: ['admin', 'owner'], permission: 'stock_in' },

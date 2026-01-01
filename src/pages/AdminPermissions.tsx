@@ -26,6 +26,7 @@ const defaultPermissions: UserPermissions = {
   suppliers: false,
   users: false,
   settings: false,
+  dashboard: true,
 };
 
 const permissionLabels: Record<keyof UserPermissions, string> = {
@@ -38,6 +39,7 @@ const permissionLabels: Record<keyof UserPermissions, string> = {
   suppliers: 'Supplier',
   users: 'Manajemen User',
   settings: 'Pengaturan',
+  dashboard: 'Dashboard',
 };
 
 const AdminPermissions = () => {
