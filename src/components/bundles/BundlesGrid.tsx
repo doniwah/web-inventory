@@ -311,12 +311,40 @@ export function BundlesGrid() {
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
+      // 1. Check if bundle has been used in transactions
+      const { data: transactions, error: txError } = await supabase
+        .from('stock_out')
+        .select('id')
+        .eq('bundle_id', selectedBundle.id)
+        .limit(1);
+
+      if (txError) throw txError;
+
+      if (transactions && transactions.length > 0) {
+        toast({
+          title: 'Error',
+          description: 'Tidak bisa menghapus bundling yang sudah memiliki riwayat transaksi barang keluar.',
+          variant: 'destructive',
+        });
+        setDeleteDialogOpen(false);
+        return;
+      }
+
+      // 2. Delete bundle_items first
+      const { error: itemsError } = await supabase
+        .from('bundle_items')
+        .delete()
+        .eq('bundle_id', selectedBundle.id);
+
+      if (itemsError) throw itemsError;
+
+      // 3. Delete bundle
+      const { error: bundleError } = await supabase
         .from('bundles')
         .delete()
         .eq('id', selectedBundle.id);
 
-      if (error) throw error;
+      if (bundleError) throw bundleError;
 
       toast({
         title: 'Berhasil',

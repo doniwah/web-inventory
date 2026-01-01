@@ -34,7 +34,9 @@ import {
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activityLogger";
 import { useAuth } from "@/hooks/useAuth";
+import { Textarea } from "@/components/ui/textarea";
 import {
+  AlertTriangle,
   MoreHorizontal,
   Package,
   Pencil,
@@ -77,6 +79,7 @@ export function ProductsTable() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [satuans, setSatuans] = useState<Satuan[]>([]);
+  const [allSatuans, setAllSatuans] = useState<Satuan[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -101,6 +104,7 @@ export function ProductsTable() {
     pcs_per_box: "",
     supplier_id: "",
     satuan_id: "",
+    adjustment_reason: "",
   });
 
   const { toast } = useToast();
@@ -146,7 +150,23 @@ export function ProductsTable() {
       .from("satuans")
       .select("id, nama_satuan")
       .order("nama_satuan");
-    setSatuans(data ?? []);
+    
+    // Transform data to map units correctly
+    // box -> Dus (Top), pack -> Pack (Middle), pcs -> Pcs (Bottom)
+    const mappedData = (data ?? []).map(s => {
+      let name = s.nama_satuan;
+      const lowerName = name.toLowerCase();
+      if (lowerName === 'box') name = 'Dus';
+      if (lowerName === 'pack') name = 'Pack';
+      if (lowerName === 'dus') name = 'Dus';
+      return { ...s, nama_satuan: name };
+    });
+    
+    setAllSatuans(mappedData);
+    
+    // Remove duplicates only for the dropdown selection
+    const uniqueSatuans = mappedData.filter((v, i, a) => a.findIndex(t => t.nama_satuan === v.nama_satuan) === i);
+    setSatuans(uniqueSatuans);
   };
 
   // Fetch requirements
@@ -180,16 +200,36 @@ export function ProductsTable() {
     if (product) {
       setEditMode(true);
       setSelectedProduct(product);
+      
+      // Convert stored Pcs to display unit value (if Dus/Pack)
+      let displayStok = product.stok;
+      const boxPerDus = product.box_per_dus || 0;
+      const pcsPerBox = product.pcs_per_box || 0;
+      
+      // We need to fetch the unit name for this product
+      // Since fetchSatuans might not have been called yet or state is pending, 
+      // we check the joined data from product.
+      const unitName = product.satuans?.nama_satuan?.toLowerCase() || '';
+      const isDusDisplay = unitName === 'box' || unitName === 'dus';
+      const isPackDisplay = unitName === 'pack';
+
+      if (isDusDisplay && boxPerDus && pcsPerBox) {
+        displayStok = Math.floor(product.stok / (boxPerDus * pcsPerBox));
+      } else if (isPackDisplay && pcsPerBox) {
+        displayStok = Math.floor(product.stok / pcsPerBox);
+      }
+
       setFormData({
         nama_produk: product.nama_produk,
         harga_beli: product.harga_beli.toString(),
         harga_jual: product.harga_jual.toString(),
-        stok: product.stok.toString(),
+        stok: displayStok.toString(),
         stok_minimum: product.stok_minimum.toString(),
         box_per_dus: product.box_per_dus?.toString() || "",
         pcs_per_box: product.pcs_per_box?.toString() || "",
         supplier_id: product.supplier_id?.toString() || "",
         satuan_id: product.satuan_id?.toString() || "",
+        adjustment_reason: ""
       });
     } else {
       setEditMode(false);
@@ -204,6 +244,7 @@ export function ProductsTable() {
         pcs_per_box: "",
         supplier_id: "",
         satuan_id: "",
+        adjustment_reason: "",
       });
     }
     setDialogOpen(true);
@@ -222,19 +263,47 @@ export function ProductsTable() {
     setSubmitting(true);
 
     try {
+      let finalStok = parseInt(formData.stok) || 0;
+      const boxPerDus = parseInt(formData.box_per_dus) || 0;
+      const pcsPerBox = parseInt(formData.pcs_per_box) || 0;
+
+      // Convert input to Pcs if unit is Dus or Pack
+      // Use allSatuans for more reliable ID lookup
+      const selectedSatuan = (allSatuans.length > 0 ? allSatuans : satuans).find(s => s.id.toString() === formData.satuan_id);
+      const isDus = selectedSatuan?.nama_satuan.toLowerCase() === 'box' || selectedSatuan?.nama_satuan.toLowerCase() === 'dus';
+      const isPack = selectedSatuan?.nama_satuan.toLowerCase() === 'pack' || (selectedSatuan?.nama_satuan === 'Pack');
+
+      if (isDus && boxPerDus && pcsPerBox) {
+        finalStok = finalStok * boxPerDus * pcsPerBox;
+      } else if (isPack && pcsPerBox) {
+        finalStok = finalStok * pcsPerBox;
+      }
+
       const productData = {
         nama_produk: formData.nama_produk,
         harga_beli: parseInt(formData.harga_beli),
         harga_jual: parseInt(formData.harga_jual),
-        stok: parseInt(formData.stok) || 0,
+        stok: finalStok,
         stok_minimum: parseInt(formData.stok_minimum) || 0,
-        box_per_dus: formData.box_per_dus ? parseInt(formData.box_per_dus) : null,
-        pcs_per_box: formData.pcs_per_box ? parseInt(formData.pcs_per_box) : null,
+        box_per_dus: boxPerDus || null,
+        pcs_per_box: pcsPerBox || null,
         supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
         satuan_id: formData.satuan_id ? parseInt(formData.satuan_id) : null,
       };
 
       if (editMode && selectedProduct) {
+        // Validation check for stock adjustment reason
+        const oldStock = selectedProduct.stok;
+        if (oldStock !== finalStok && !formData.adjustment_reason) {
+          toast({
+            title: "Alasan Penting",
+            description: "Anda mengubah stok secara manual, harap isi alasan penyesuaian.",
+            variant: "destructive",
+          });
+          setSubmitting(false);
+          return;
+        }
+
         // Update
         const { error } = await supabase
           .from("products")
@@ -244,14 +313,13 @@ export function ProductsTable() {
         if (error) throw error;
 
         // Log activity if stock changed
-        const oldStock = selectedProduct.stok;
-        const newStock = productData.stok;
-        if (oldStock !== newStock) {
-          const difference = newStock - oldStock;
+        if (oldStock !== finalStok) {
+          const difference = finalStok - oldStock;
           const action = difference > 0 ? 'ditambah' : 'dikurangi';
+          
           await logActivity(
             'adjustment',
-            `Stok ${formData.nama_produk} ${action} ${Math.abs(difference)} (${oldStock} → ${newStock})`,
+            `Stok ${formData.nama_produk} ${action} ${Math.abs(difference)} Pcs (${oldStock} → ${finalStok}) - Alasan: ${formData.adjustment_reason}`,
             user?.id ? user.id : undefined
           );
         }
@@ -322,6 +390,42 @@ export function ProductsTable() {
     setSubmitting(true);
 
     try {
+      // 1. Check if used in Bundles
+      const { data: bundleMatch, error: be } = await supabase
+        .from('bundle_items')
+        .select('bundle_id')
+        .eq('product_id', selectedProduct.id)
+        .limit(1);
+      
+      if (be) throw be;
+      if (bundleMatch && bundleMatch.length > 0) {
+        throw new Error("Produk tidak bisa dihapus karena masih terdaftar dalam paket bundling.");
+      }
+
+      // 2. Check if used in Stock In
+      const { data: siMatch, error: sie } = await supabase
+        .from('stock_in')
+        .select('id')
+        .eq('product_id', selectedProduct.id)
+        .limit(1);
+      
+      if (sie) throw sie;
+      if (siMatch && siMatch.length > 0) {
+        throw new Error("Produk tidak bisa dihapus karena memiliki riwayat stok masuk.");
+      }
+
+      // 3. Check if used in Stock Out
+      const { data: soMatch, error: soe } = await supabase
+        .from('stock_out')
+        .select('id')
+        .eq('product_id', selectedProduct.id)
+        .limit(1);
+      
+      if (soe) throw soe;
+      if (soMatch && soMatch.length > 0) {
+        throw new Error("Produk tidak bisa dihapus karena memiliki riwayat transaksi barang keluar.");
+      }
+
       const { error } = await supabase
         .from("products")
         .delete()
@@ -359,12 +463,12 @@ export function ProductsTable() {
     const dus = Math.floor(totalPcs / pcsInDus);
     const remainingAfterDus = totalPcs % pcsInDus;
     
-    const box = Math.floor(remainingAfterDus / pcsPerBox);
+    const pack = Math.floor(remainingAfterDus / pcsPerBox);
     const pcs = remainingAfterDus % pcsPerBox;
 
     const parts = [];
     if (dus > 0) parts.push(`${dus} Dus`);
-    if (box > 0) parts.push(`${box} Box`);
+    if (pack > 0) parts.push(`${pack} Pack`);
     if (pcs > 0 || parts.length === 0) parts.push(`${pcs} Pcs`);
 
     return parts.join(', ');
@@ -428,16 +532,13 @@ export function ProductsTable() {
                     {p.nama_produk}
                   </div>
                 </TableCell>
-                <TableCell>{p.satuans?.nama_satuan ?? "-"}</TableCell>
+                <TableCell>{p.satuans?.nama_satuan?.toLowerCase() === 'box' ? 'Dus' : (p.satuans?.nama_satuan?.toLowerCase() === 'pack' ? 'Pack' : (p.satuans?.nama_satuan ?? "-"))}</TableCell>
                 <TableCell>{p.suppliers?.nama_supplier ?? "-"}</TableCell>
                 <TableCell className="text-right">
                   Rp {p.harga_jual.toLocaleString()}
                 </TableCell>
                 <TableCell className="text-center font-medium">
                   {formatStock(p.stok, p.box_per_dus, p.pcs_per_box)}
-                  <div className="text-[10px] text-muted-foreground font-normal">
-                    Total: {p.stok} Pcs
-                  </div>
                 </TableCell>
                 <TableCell>
                   {p.stok === 0 ? (
@@ -508,7 +609,8 @@ export function ProductsTable() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-4 py-4">
+          <div className="max-h-[60vh] overflow-y-auto pr-4 py-4 custom-scrollbar">
+            <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="nama_produk">Nama Produk *</Label>
               <Input
@@ -621,7 +723,7 @@ export function ProductsTable() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="box_per_dus">1 Dus Berapa Box?</Label>
+              <Label htmlFor="box_per_dus">1 Dus Berapa Pack?</Label>
               <Input
                 id="box_per_dus"
                 type="number"
@@ -634,7 +736,7 @@ export function ProductsTable() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="pcs_per_box">1 Box Berapa Pcs?</Label>
+              <Label htmlFor="pcs_per_box">1 Pack Berapa Pcs?</Label>
               <Input
                 id="pcs_per_box"
                 type="number"
@@ -651,7 +753,26 @@ export function ProductsTable() {
                 Info: 1 Dus = {parseInt(formData.box_per_dus) * parseInt(formData.pcs_per_box)} Pcs
               </div>
             )}
+
+            {editMode && selectedProduct && formData.stok !== selectedProduct.stok.toString() && (
+              <div className="col-span-2 space-y-2 mt-2 p-3 border border-warning/30 bg-warning/10 rounded-lg">
+                <div className="flex items-center gap-2 text-warning font-semibold text-sm">
+                  <AlertTriangle className="h-4 w-4" />
+                  Alasan Penyesuaian Stok *
+                </div>
+                <Textarea
+                  placeholder="Contoh: Salah input sebelumnya / Barang rusak / Opname fisik"
+                  value={formData.adjustment_reason}
+                  onChange={(e) => setFormData({ ...formData, adjustment_reason: e.target.value })}
+                  className="bg-background"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Alasan wajib diisi karena Anda mengubah jumlah stok secara manual.
+                </p>
+              </div>
+            )}
           </div>
+        </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>

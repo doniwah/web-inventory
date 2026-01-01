@@ -65,7 +65,7 @@ export function StockInForm() {
 
       if (formData.unit === 'dus') {
         calculatedPcs = qty * (selectedProduct.box_per_dus || 1) * (selectedProduct.pcs_per_box || 1);
-      } else if (formData.unit === 'box') {
+      } else if (formData.unit === 'pack') {
         calculatedPcs = qty * (selectedProduct.pcs_per_box || 1);
       }
 
@@ -297,7 +297,7 @@ export function StockInForm() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="pcs">Pcs</SelectItem>
-                      <SelectItem value="box" disabled={!selectedProduct?.pcs_per_box}>Box</SelectItem>
+                      <SelectItem value="pack" disabled={!selectedProduct?.pcs_per_box}>Pack</SelectItem>
                       <SelectItem value="dus" disabled={!selectedProduct?.box_per_dus}>Dus</SelectItem>
                     </SelectContent>
                   </Select>
@@ -306,7 +306,12 @@ export function StockInForm() {
                   <p className="text-[10px] text-muted-foreground italic">
                     Konversi: {formData.unit === 'dus' 
                       ? `1 Dus = ${(selectedProduct.box_per_dus || 1) * (selectedProduct.pcs_per_box || 1)} Pcs` 
-                      : `1 Box = ${selectedProduct.pcs_per_box || 1} Pcs`}
+                      : `1 Pack = ${selectedProduct.pcs_per_box || 1} Pcs`}
+                  </p>
+                )}
+                {selectedProduct && (!selectedProduct.pcs_per_box || !selectedProduct.box_per_dus) && (
+                  <p className="text-[10px] text-orange-500 italic">
+                    * Satuan Dus/Pack terkunci? Atur konversi di Master Produk.
                   </p>
                 )}
               </div>
