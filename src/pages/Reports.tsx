@@ -38,6 +38,7 @@ import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { 
   Area, 
   AreaChart, 
@@ -187,9 +188,11 @@ const Reports = () => {
       if (error) throw error;
       setStockInData(data || []);
       setShowStockInDialog(true);
+      return data || []; // Return data
     } catch (error) {
       console.error('Error:', error);
       toast({ title: 'Error', description: 'Gagal memuat data', variant: 'destructive' });
+      return [];
     } finally {
       setLoading(false);
     }
@@ -217,9 +220,11 @@ const Reports = () => {
       if (error) throw error;
       setStockOutData(data || []);
       setShowStockOutDialog(true);
+      return data || [];
     } catch (error) {
       console.error('Error:', error);
       toast({ title: 'Error', description: 'Gagal memuat data', variant: 'destructive' });
+      return [];
     } finally {
       setLoading(false);
     }
@@ -285,9 +290,11 @@ const Reports = () => {
 
       setStockData(stockDataWithActivity as any);
       setShowStockDialog(true);
+      return stockDataWithActivity as any;
     } catch (error) {
       console.error('Error:', error);
       toast({ title: 'Error', description: 'Gagal memuat data', variant: 'destructive' });
+      return [];
     } finally {
       setLoading(false);
     }
@@ -665,6 +672,115 @@ const Reports = () => {
     toast({ title: 'Berhasil', description: 'PDF berhasil diunduh' });
   };
 
+  // Export Excel Functions
+  const exportStockInExcel = (data: any[] = stockInData) => {
+    if (data.length === 0) {
+      toast({ title: 'Error', description: 'Tidak ada data untuk diexport', variant: 'destructive' });
+      return;
+    }
+    
+    const worksheet = XLSX.utils.json_to_sheet(
+      data.map(item => ({
+        'Tanggal': format(new Date(item.tanggal), 'dd/MM/yyyy'),
+        'Produk': item.products?.nama_produk || '-',
+        'Supplier': item.suppliers?.nama_supplier || '-',
+        'Qty': item.qty,
+        'Total Harga': item.total_harga,
+      }))
+    );
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Barang Masuk');
+    
+    XLSX.writeFile(workbook, `Laporan_Barang_Masuk_${format(new Date(), 'ddMMyyyy')}.xlsx`);
+    toast({ title: 'Berhasil', description: 'Excel berhasil diunduh' });
+  };
+
+  const exportStockOutExcel = (data: any[] = stockOutData) => {
+    if (data.length === 0) {
+      toast({ title: 'Error', description: 'Tidak ada data untuk diexport', variant: 'destructive' });
+      return;
+    }
+    
+    const worksheet = XLSX.utils.json_to_sheet(
+      data.map(item => ({
+        'Tanggal': format(new Date(item.tanggal), 'dd/MM/yyyy'),
+        'Produk': item.products?.nama_produk || item.bundles?.name || '-',
+        'Qty': item.qty,
+        'Total Harga': item.total_harga,
+      }))
+    );
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Barang Keluar');
+    XLSX.writeFile(workbook, `Laporan_Barang_Keluar_${format(new Date(), 'ddMMyyyy')}.xlsx`);
+    toast({ title: 'Berhasil', description: 'Excel berhasil diunduh' });
+  };
+
+  const exportStockExcel = (data: any[] = stockData) => {
+    if (data.length === 0) {
+      toast({ title: 'Error', description: 'Tidak ada data untuk diexport', variant: 'destructive' });
+      return;
+    }
+    
+    const worksheet = XLSX.utils.json_to_sheet(
+      data.map(item => ({
+        'Produk': item.nama_produk,
+        'Stok': item.stok,
+        'Stok Minimum': item.stok_minimum,
+        'Status': item.stok === 0 ? 'Out of Stock' : (item.stok <= item.stok_minimum ? 'Menipis' : 'Aman'),
+        'Harga Beli': item.harga_beli,
+        'Nilai Total': item.stok * item.harga_beli,
+      }))
+    );
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Stok Barang');
+    XLSX.writeFile(workbook, `Laporan_Stok_${format(new Date(), 'ddMMyyyy')}.xlsx`);
+    toast({ title: 'Berhasil', description: 'Excel berhasil diunduh' });
+  };
+
+  const exportAssetExcel = () => {
+    if (!assetData) return;
+    
+    const worksheet = XLSX.utils.json_to_sheet([
+      { 'Keterangan': 'Nilai Aset Bulan Ini', 'Nilai': assetData.current },
+      { 'Keterangan': 'Nilai Aset Bulan Lalu', 'Nilai': assetData.previous },
+      { 'Keterangan': 'Perubahan', 'Nilai': assetData.change },
+      { 'Keterangan': 'Perubahan (%)', 'Nilai': `${assetData.changePercent.toFixed(2)}%` },
+    ]);
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Nilai Aset');
+    XLSX.writeFile(workbook, `Laporan_Nilai_Aset_${format(new Date(), 'ddMMyyyy')}.xlsx`);
+    toast({ title: 'Berhasil', description: 'Excel berhasil diunduh' });
+  };
+
+  const exportMarginExcel = (data: any[] = marginData) => {
+    if (data.length === 0) {
+      toast({ title: 'Error', description: 'Tidak ada data untuk diexport', variant: 'destructive' });
+      return;
+    }
+    
+    const worksheet = XLSX.utils.json_to_sheet(
+      data.map(item => ({
+        'Produk': item.nama_produk,
+        'Harga Beli': item.harga_beli,
+        'Harga Jual': item.harga_jual,
+        'Margin (Rp)': item.margin,
+        'Margin (%)': item.margin_percent.toFixed(2),
+        'Stok Terjual': item.stok,
+        'Potensi Profit': item.potential_profit,
+      }))
+    );
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Margin & Keuntungan');
+    XLSX.writeFile(workbook, `Laporan_Margin_${format(new Date(), 'ddMMyyyy')}.xlsx`);
+    toast({ title: 'Berhasil', description: 'Excel berhasil diunduh' });
+  };
+
+
   const reports = [
     {
       title: 'Laporan Barang Masuk',
@@ -677,6 +793,14 @@ const Reports = () => {
           fetchStockInData().then(() => setTimeout(exportStockInPDF, 500));
         } else {
           exportStockInPDF();
+        }
+      },
+      exportExcelAction: async () => {
+        if (stockInData.length === 0) {
+          const data = await fetchStockInData();
+          exportStockInExcel(data);
+        } else {
+          exportStockInExcel();
         }
       },
     },
@@ -693,6 +817,14 @@ const Reports = () => {
           exportStockOutPDF();
         }
       },
+      exportExcelAction: async () => {
+        if (stockOutData.length === 0) {
+          const data = await fetchStockOutData();
+          exportStockOutExcel(data);
+        } else {
+          exportStockOutExcel();
+        }
+      },
     },
     {
       title: 'Laporan Stok Barang',
@@ -705,6 +837,14 @@ const Reports = () => {
           fetchStockData().then(() => setTimeout(exportStockPDF, 500));
         } else {
           exportStockPDF();
+        }
+      },
+      exportExcelAction: async () => {
+        if (stockData.length === 0) {
+          const data = await fetchStockData();
+          exportStockExcel(data);
+        } else {
+          exportStockExcel();
         }
       },
     },
@@ -721,6 +861,14 @@ const Reports = () => {
           exportAssetPDF();
         }
       },
+      exportExcelAction: async () => {
+        if (!assetData) {
+          await fetchAssetData();
+          setTimeout(exportAssetExcel, 300);
+        } else {
+          exportAssetExcel();
+        }
+      },
     },
     {
       title: 'Laporan Margin & Keuntungan',
@@ -733,6 +881,15 @@ const Reports = () => {
           fetchMarginData().then(() => setTimeout(exportMarginPDF, 500));
         } else {
           exportMarginPDF();
+        }
+      },
+      exportExcelAction: async () => {
+        if (marginData.length === 0) {
+          await fetchMarginData();
+          // Margin data uses state, so we need to wait
+          setTimeout(() => exportMarginExcel(marginData), 500);
+        } else {
+          exportMarginExcel();
         }
       },
     },
@@ -801,9 +958,20 @@ const Reports = () => {
                     className="gap-2"
                     onClick={report.exportAction}
                     disabled={loading}
+                    title="Export PDF"
                   >
                     <Download className="h-4 w-4" />
                     PDF
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="gap-2 bg-green-50 hover:bg-green-100 dark:bg-green-950/20 dark:hover:bg-green-950/30"
+                    onClick={report.exportExcelAction}
+                    disabled={loading}
+                    title="Export Excel"
+                  >
+                    <Download className="h-4 w-4" />
+                    Excel
                   </Button>
                 </div>
               </CardContent>

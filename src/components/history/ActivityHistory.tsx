@@ -26,8 +26,9 @@ import {
   DollarSign, 
   Layers,
   Filter,
+  Calendar,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
@@ -75,15 +76,52 @@ const typeConfig = {
 export function ActivityHistory() {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all'); // all, current, last, last3, custom
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const PAGE_SIZE = 10;
 
+  // Get date range based on filter
+  const getDateRange = () => {
+    const now = new Date();
+    
+    switch (dateFilter) {
+      case 'current':
+        return {
+          start: startOfMonth(now),
+          end: endOfMonth(now)
+        };
+      case 'last':
+        const lastMonth = subMonths(now, 1);
+        return {
+          start: startOfMonth(lastMonth),
+          end: endOfMonth(lastMonth)
+        };
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          return {
+            start: startOfDay(new Date(customStartDate)),
+            end: endOfDay(new Date(customEndDate))
+          };
+        }
+        return null;
+      default:
+        return null;
+    }
+  };
+
   useEffect(() => {
     fetchActivityLogs();
-  }, [page]);
+  }, [page, dateFilter, customStartDate, customEndDate]);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [dateFilter, customStartDate, customEndDate]);
 
   const fetchActivityLogs = async () => {
     setLoading(true);
@@ -91,17 +129,38 @@ export function ActivityHistory() {
       const from = (page - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      // Get total count first
-      const { count } = await supabase
+      // Get total count first with date filter
+      let countQuery = supabase
         .from('activity_logs')
         .select('*', { count: 'exact', head: true });
+      
+      const dateRange = getDateRange();
+      
+      // Debug logging
+      if (dateRange) {
+        console.log('Date Filter Applied:', {
+          filter: dateFilter,
+          start: dateRange.start.toISOString(),
+          end: dateRange.end.toISOString()
+        });
+      } else {
+        console.log('No Date Filter (showing all)');
+      }
+      
+      if (dateRange) {
+        countQuery = countQuery
+          .gte('created_at', dateRange.start.toISOString())
+          .lte('created_at', dateRange.end.toISOString());
+      }
+
+      const { count } = await countQuery;
 
       if (count) {
         setTotalPages(Math.ceil(count / PAGE_SIZE));
       }
 
       // First try with user join
-      let { data, error } = await supabase
+      let query = supabase
         .from('activity_logs')
         .select(`
           id, 
@@ -110,16 +169,34 @@ export function ActivityHistory() {
           created_at,
           user_id,
           users!user_id (name)
-        `)
+        `);
+      
+      // Apply date filter
+      if (dateRange) {
+        query = query
+          .gte('created_at', dateRange.start.toISOString())
+          .lte('created_at', dateRange.end.toISOString());
+      }
+      
+      let { data, error } = await query
         .order('created_at', { ascending: false })
         .range(from, to);
 
       // If join fails, try without join and fetch users separately
       if (error) {
         console.log('Trying without user join...', error);
-        const result = await supabase
+        let fallbackQuery = supabase
           .from('activity_logs')
-          .select('id, type, aktivitas, created_at, user_id')
+          .select('id, type, aktivitas, created_at, user_id');
+        
+        // Apply date filter to fallback query too
+        if (dateRange) {
+          fallbackQuery = fallbackQuery
+            .gte('created_at', dateRange.start.toISOString())
+            .lte('created_at', dateRange.end.toISOString());
+        }
+        
+        const result = await fallbackQuery
           .order('created_at', { ascending: false })
           .range(from, to);
         
@@ -212,7 +289,45 @@ export function ActivityHistory() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Select value={dateFilter} onValueChange={setDateFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Semua Tanggal" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Tanggal</SelectItem>
+              <SelectItem value="current">Bulan Ini</SelectItem>
+              <SelectItem value="last">Bulan Lalu</SelectItem>
+              <SelectItem value="custom">Pilih Tanggal</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {/* Custom Date Range */}
+      {dateFilter === 'custom' && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center p-4 bg-secondary/30 rounded-lg border">
+          <div className="flex-1">
+            <label className="text-sm font-medium mb-1.5 block">Dari Tanggal</label>
+            <Input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+              max={customEndDate || undefined}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-sm font-medium mb-1.5 block">Sampai Tanggal</label>
+            <Input
+              type="date"
+              value={customEndDate}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+              min={customStartDate || undefined}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-xl border bg-card overflow-x-auto custom-scrollbar">
