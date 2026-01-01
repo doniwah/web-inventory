@@ -78,7 +78,8 @@ export function ProductsTable() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [isAdmin, setIsAdmin] = useState(false);
+  
+  const canManage = user?.role === 'owner' || (user?.role === 'admin' && user?.permissions?.products);
   
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -143,35 +144,8 @@ export function ProductsTable() {
     setSatuans(data ?? []);
   };
 
-  // Check role
+  // Fetch requirements
   useEffect(() => {
-    const getRole = async () => {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError) {
-        console.error("Auth error:", authError);
-        return;
-      }
-
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (error) {
-        console.error("Role fetch error:", error);
-        return;
-      }
-
-      setIsAdmin(data?.role === "admin");
-    };
-
-    getRole();
     fetchSuppliers();
     fetchSatuans();
   }, []);
@@ -384,7 +358,7 @@ export function ProductsTable() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        {isAdmin && (
+                  {canManage && (
           <Button className="gap-2" onClick={() => handleOpenDialog()}>
             <Plus className="h-4 w-4" /> Tambah Produk
           </Button>
@@ -439,7 +413,7 @@ export function ProductsTable() {
                     </Badge>
                   </TableCell>
 
-                  {isAdmin && (
+                            {canManage && (
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

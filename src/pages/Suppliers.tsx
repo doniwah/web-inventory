@@ -37,9 +37,9 @@ import {
   Phone,
   MapPin,
 } from 'lucide-react';
-import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 type Supplier = {
   id: number;
@@ -50,10 +50,13 @@ type Supplier = {
 };
 
 const Suppliers = () => {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const canManage = user?.role === 'owner' || (user?.role === 'admin' && user?.permissions?.suppliers);
   
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -234,13 +237,15 @@ const Suppliers = () => {
               className="w-full pl-9 sm:w-64"
             />
           </div>
-          <Button 
-            className="gap-2 gradient-primary text-primary-foreground border-0 shadow-glow"
-            onClick={() => handleOpenDialog()}
-          >
-            <Plus className="h-4 w-4" />
-            Tambah Supplier
-          </Button>
+          {canManage && (
+            <Button 
+              className="gap-2 gradient-primary text-primary-foreground border-0 shadow-glow"
+              onClick={() => handleOpenDialog()}
+            >
+              <Plus className="h-4 w-4" />
+              Tambah Supplier
+            </Button>
+          )}
         </div>
 
         {/* Table */}
@@ -292,32 +297,34 @@ const Suppliers = () => {
                     <TableCell className="text-muted-foreground">
                       {format(new Date(supplier.created_at), 'dd MMM yyyy', { locale: id })}
                     </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem 
-                            className="gap-2"
-                            onClick={() => handleOpenDialog(supplier)}
-                          >
-                            <Pencil className="h-4 w-4" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="gap-2 text-destructive"
-                            onClick={() => {
-                              setSelectedSupplier(supplier);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" /> Hapus
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                    {canManage && (
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem 
+                              className="gap-2"
+                              onClick={() => handleOpenDialog(supplier)}
+                            >
+                              <Pencil className="h-4 w-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="gap-2 text-destructive"
+                              onClick={() => {
+                                setSelectedSupplier(supplier);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" /> Hapus
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

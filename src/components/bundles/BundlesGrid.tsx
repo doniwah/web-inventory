@@ -74,6 +74,8 @@ export function BundlesGrid() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   
+  const canManage = user?.role === 'owner' || (user?.role === 'admin' && user?.permissions?.bundles);
+  
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -386,13 +388,15 @@ export function BundlesGrid() {
             className="w-full pl-9 sm:w-64"
           />
         </div>
-        <Button
-          className="gap-2 gradient-primary text-primary-foreground border-0 shadow-glow"
-          onClick={() => handleOpenDialog()}
-        >
-          <Plus className="h-4 w-4" />
-          Buat Bundling
-        </Button>
+        {canManage && (
+          <Button
+            className="gap-2 gradient-primary text-primary-foreground border-0 shadow-glow"
+            onClick={() => handleOpenDialog()}
+          >
+            <Plus className="h-4 w-4" />
+            Buat Bundling
+          </Button>
+        )}
       </div>
 
       {/* Bundles Grid */}
@@ -425,27 +429,29 @@ export function BundlesGrid() {
                       <h3 className="font-semibold text-foreground">{bundle.name}</h3>
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => handleOpenDialog(bundle)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                      onClick={() => {
-                        setSelectedBundle(bundle);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {canManage && (
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleOpenDialog(bundle)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                        onClick={() => {
+                          setSelectedBundle(bundle);
+                          setDeleteDialogOpen(true);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
