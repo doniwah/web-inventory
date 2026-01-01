@@ -391,57 +391,56 @@ export function ProductsTable() {
               </TableCell>
             </TableRow>
           ) : (
-            filteredProducts.map((p) => {
-              const low = p.stok <= p.stok_minimum;
-
-              return (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <div className="flex gap-2 items-center">
-                      <Package className="h-4 w-4 text-primary" />
-                      {p.nama_produk}
-                    </div>
-                  </TableCell>
-                  <TableCell>{p.satuans?.nama_satuan ?? "-"}</TableCell>
-                  <TableCell>{p.suppliers?.nama_supplier ?? "-"}</TableCell>
-                  <TableCell className="text-right">
-                    Rp {p.harga_jual.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-center">{p.stok}</TableCell>
-                  <TableCell>
-                    <Badge variant={low ? "destructive" : "default"}>
-                      {low ? "Menipis" : "Aman"}
-                    </Badge>
-                  </TableCell>
-
-                            {canManage && (
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onClick={() => handleOpenDialog(p)}>
-                            <Pencil className="mr-2 h-4 w-4" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => {
-                              setSelectedProduct(p);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" /> Hapus
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            filteredProducts.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell>
+                  <div className="flex gap-2 items-center">
+                    <Package className="h-4 w-4 text-primary" />
+                    {p.nama_produk}
+                  </div>
+                </TableCell>
+                <TableCell>{p.satuans?.nama_satuan ?? "-"}</TableCell>
+                <TableCell>{p.suppliers?.nama_supplier ?? "-"}</TableCell>
+                <TableCell className="text-right">
+                  Rp {p.harga_jual.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-center">{p.stok}</TableCell>
+                <TableCell>
+                  {p.stok === 0 ? (
+                    <Badge variant="destructive">Habis</Badge>
+                  ) : p.stok <= p.stok_minimum ? (
+                    <Badge variant="warning">Menipis</Badge>
+                  ) : (
+                    <Badge variant="success">Tersedia</Badge>
                   )}
-                </TableRow>
-              );
-            })
+                </TableCell>
+                {canManage && (
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => handleOpenDialog(p)}>
+                          <Pencil className="mr-2 h-4 w-4" /> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => {
+                            setSelectedProduct(p);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Hapus
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))
           )}
         </TableBody>
       </Table>

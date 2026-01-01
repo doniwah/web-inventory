@@ -30,6 +30,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (data: { name?: string; email?: string; password?: string }) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -242,8 +243,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const updateProfile = async (data: { name?: string; email?: string; password?: string }) => {
+    if (!user) throw new Error("Tidak ada user yang sedang login");
+
+    try {
+      // 1. Update Auth (Email/Password)
+      if (data.email || data.password) {
+        const { error: authError } = await supabase.auth.updateUser({
+          email: data.email,
+          password: data.password,
+        });
+        if (authError) throw authError;
+      }
+
+      // 2. Update Database Profile (Name/Email)
+      if (data.name || data.email) {
+        const { error: dbError } = await supabase
+          .from("users")
+          .update({
+            name: data.name,
+            email: data.email,
+          })
+          .eq("id", user.id);
+        
+        if (dbError) throw dbError;
+      }
+
+      // 3. Update Local State
+      setUser({
+        ...user,
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.email ? { email: data.email } : {}),
+      });
+
+    } catch (error) {
+      console.error("❌ Update profile failed:", error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

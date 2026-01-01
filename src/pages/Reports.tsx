@@ -38,6 +38,16 @@ import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { 
+  Area, 
+  AreaChart, 
+  CartesianGrid, 
+  Legend, 
+  ResponsiveContainer, 
+  Tooltip, 
+  XAxis, 
+  YAxis 
+} from 'recharts';
 
 type StockInItem = {
   id: number;
@@ -54,6 +64,7 @@ type StockOutItem = {
   qty: number;
   total_harga: number;
   products: { nama_produk: string } | null;
+  bundles: { name: string } | null;
 };
 
 type StockItem = {
@@ -70,6 +81,11 @@ type AssetComparison = {
   previous: number;
   change: number;
   changePercent: number;
+  chartData: {
+    month: string;
+    masuk: number;
+    keluar: number;
+  }[];
 };
 
 type ProductMargin = {
@@ -191,7 +207,8 @@ const Reports = () => {
           tanggal,
           qty,
           total_harga,
-          products (nama_produk)
+          products (nama_produk),
+          bundles (name)
         `)
         .gte('tanggal', startDate.toISOString())
         .lte('tanggal', endDate.toISOString())
@@ -276,44 +293,107 @@ const Reports = () => {
     }
   };
 
-  // Fetch Asset Data based on period
+  // Fetch Asset Data with 12-month history for chart
   const fetchAssetData = async () => {
     setLoading(true);
     try {
-      const { startDate, endDate } = getPeriodDates();
+      const { startDate: periodStart, endDate: periodEnd } = getPeriodDates();
+      
+      // Calculate 12-month window for chart
+      const twelveMonthsAgo = subMonths(startOfMonth(new Date()), 11);
+      
+      // 1. Fetch data for chart (last 12 months)
+      const { data: stockInHistory } = await supabase
+        .from('stock_in')
+        .select('tanggal, total_harga')
+        .gte('tanggal', twelveMonthsAgo.toISOString());
 
-      // Get stock in value during period
-      const { data: stockInData } = await supabase
+      const { data: stockOutHistory } = await supabase
+        .from('stock_out')
+        .select('tanggal, total_harga')
+        .gte('tanggal', twelveMonthsAgo.toISOString());
+
+      // 2. Aggregate chart data
+      const chartData = [];
+      for (let i = 11; i >= 0; i--) {
+        const monthDate = subMonths(new Date(), i);
+        const mStart = startOfMonth(monthDate);
+        const mEnd = endOfMonth(monthDate);
+        const monthLabel = format(monthDate, 'MMM', { locale: id });
+
+        const masuk = stockInHistory?.filter(item => {
+          const d = new Date(item.tanggal);
+          return d >= mStart && d <= mEnd;
+        }).reduce((sum, item) => sum + item.total_harga, 0) || 0;
+
+        const keluar = stockOutHistory?.filter(item => {
+          const d = new Date(item.tanggal);
+          return d >= mStart && d <= mEnd;
+        }).reduce((sum, item) => sum + item.total_harga, 0) || 0;
+
+        chartData.push({
+          month: monthLabel,
+          masuk,
+          keluar,
+        });
+      }
+
+      // 3. Calculate specific period comparison (for the display cards)
+      const { startDate: prevStart, endDate: prevEnd } = (() => {
+        const now = new Date();
+        switch (period) {
+          case 'current': return { startDate: startOfMonth(subMonths(now, 1)), endDate: endOfMonth(subMonths(now, 1)) };
+          case 'last': return { startDate: startOfMonth(subMonths(now, 2)), endDate: endOfMonth(subMonths(now, 2)) };
+          case 'last3': return { startDate: startOfMonth(subMonths(now, 6)), endDate: endOfMonth(subMonths(now, 3)) };
+          default: return { startDate: startOfMonth(subMonths(now, 1)), endDate: endOfMonth(subMonths(now, 1)) };
+        }
+      })();
+
+      const assetInCurrent = stockInHistory?.filter(item => {
+        const d = new Date(item.tanggal);
+        return d >= periodStart && d <= periodEnd;
+      }).reduce((sum, item) => sum + item.total_harga, 0) || 0;
+
+      const assetOutCurrent = stockOutHistory?.filter(item => {
+        const d = new Date(item.tanggal);
+        return d >= periodStart && d <= periodEnd;
+      }).reduce((sum, item) => sum + item.total_harga, 0) || 0;
+
+      // For previous, we might need older data if the period is "last3" or older
+      let assetInPrev = 0;
+      let assetOutPrev = 0;
+
+      const { data: prevIn } = await supabase
         .from('stock_in')
         .select('total_harga')
-        .gte('tanggal', startDate.toISOString())
-        .lte('tanggal', endDate.toISOString());
-
-      const assetIn = stockInData?.reduce((sum, item) => sum + item.total_harga, 0) || 0;
-
-      // Get stock out value during period
-      const { data: stockOutData } = await supabase
+        .gte('tanggal', prevStart.toISOString())
+        .lte('tanggal', prevEnd.toISOString());
+      
+      const { data: prevOut } = await supabase
         .from('stock_out')
         .select('total_harga')
-        .gte('tanggal', startDate.toISOString())
-        .lte('tanggal', endDate.toISOString());
+        .gte('tanggal', prevStart.toISOString())
+        .lte('tanggal', prevEnd.toISOString());
 
-      const assetOut = stockOutData?.reduce((sum, item) => sum + item.total_harga, 0) || 0;
+      assetInPrev = prevIn?.reduce((sum, item) => sum + item.total_harga, 0) || 0;
+      assetOutPrev = prevOut?.reduce((sum, item) => sum + item.total_harga, 0) || 0;
 
-      // Net asset change during period
-      const change = assetIn - assetOut;
-      const changePercent = assetOut > 0 ? (change / assetOut) * 100 : 0;
+      const currentNet = assetInCurrent - assetOutCurrent;
+      const previousNet = assetInPrev - assetOutPrev;
+      const change = currentNet - previousNet;
+      const changePercent = previousNet !== 0 ? (change / Math.abs(previousNet)) * 100 : 0;
 
       setAssetData({
-        current: assetIn,
-        previous: assetOut,
+        current: assetInCurrent,
+        previous: assetInPrev, // Showing 'Nilai Masuk' for comparison as per previous logic
         change,
         changePercent,
+        chartData
       });
       setShowAssetDialog(true);
     } catch (error) {
       console.error('Error:', error);
-      toast({ title: 'Error', description: 'Gagal memuat data', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Gagal memuat data aset', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -325,64 +405,99 @@ const Reports = () => {
     try {
       const { startDate, endDate } = getPeriodDates();
 
-      // Get stock out with product details during period
+      // Get stock out with both product and bundle details during period
       const { data: stockOutData, error } = await supabase
         .from('stock_out')
         .select(`
           qty,
           total_harga,
           product_id,
-          products!inner(id, nama_produk, harga_beli, harga_jual)
+          bundle_id,
+          products (id, nama_produk, harga_beli, harga_jual),
+          bundles (
+            id, 
+            name, 
+            harga_jual, 
+            bundle_items (
+              qty, 
+              products (harga_beli)
+            )
+          )
         `)
         .gte('tanggal', startDate.toISOString())
-        .lte('tanggal', endDate.toISOString())
-        .not('product_id', 'is', null);
+        .lte('tanggal', endDate.toISOString());
 
       if (error) throw error;
 
-      // Aggregate by product
-      const productMap = new Map<number, {
-        nama_produk: string;
+      // Aggregate by product or bundle
+      const marginMap = new Map<string, {
+        name: string;
         harga_beli: number;
         harga_jual: number;
         qty_sold: number;
         revenue: number;
+        type: 'product' | 'bundle';
       }>();
 
       stockOutData?.forEach((item: any) => {
-        const product = item.products;
-        if (product) {
-          const existing = productMap.get(product.id);
+        if (item.product_id && item.products) {
+          const product = item.products;
+          const key = `p_${product.id}`;
+          const existing = marginMap.get(key);
           if (existing) {
             existing.qty_sold += item.qty;
             existing.revenue += item.total_harga;
           } else {
-            productMap.set(product.id, {
-              nama_produk: product.nama_produk,
+            marginMap.set(key, {
+              name: product.nama_produk,
               harga_beli: product.harga_beli,
               harga_jual: product.harga_jual,
               qty_sold: item.qty,
               revenue: item.total_harga,
+              type: 'product'
+            });
+          }
+        } else if (item.bundle_id && item.bundles) {
+          const bundle = item.bundles;
+          const key = `b_${bundle.id}`;
+          
+          // Calculate bundle cost price (modal)
+          const bundleCost = bundle.bundle_items?.reduce((sum: number, bi: any) => {
+            return sum + (bi.qty * (bi.products?.harga_beli || 0));
+          }, 0) || 0;
+
+          const existing = marginMap.get(key);
+          if (existing) {
+            existing.qty_sold += item.qty;
+            existing.revenue += item.total_harga;
+          } else {
+            marginMap.set(key, {
+              name: `[BUNDLE] ${bundle.name}`,
+              harga_beli: bundleCost,
+              harga_jual: bundle.harga_jual,
+              qty_sold: item.qty,
+              revenue: item.total_harga,
+              type: 'bundle'
             });
           }
         }
       });
 
       // Calculate margins
-      const margins: ProductMargin[] = Array.from(productMap.entries()).map(([id, data]) => {
+      const margins: ProductMargin[] = Array.from(marginMap.entries()).map(([key, data], index) => {
         const margin = data.harga_jual - data.harga_beli;
         const margin_percent = data.harga_beli > 0 ? (margin / data.harga_beli) * 100 : 0;
         const actual_profit = data.revenue - (data.qty_sold * data.harga_beli);
 
         return {
-          id,
-          nama_produk: data.nama_produk,
+          id: index, // Use index for key since we mixed table IDs
+          nama_produk: data.name,
           harga_beli: data.harga_beli,
           harga_jual: data.harga_jual,
-          stok: data.qty_sold, // Using qty_sold as "stok" for this period
+          stok: data.qty_sold,
           margin,
           margin_percent,
-          potential_profit: actual_profit, // Actual profit from sales in period
+          potential_profit: actual_profit,
         };
       });
 
@@ -435,7 +550,7 @@ const Reports = () => {
 
     const tableData = stockOutData.map(item => [
       format(new Date(item.tanggal), 'dd/MM/yyyy'),
-      item.products?.nama_produk || '-',
+      item.products?.nama_produk || item.bundles?.name || '-',
       item.qty.toString(),
       formatCurrency(item.total_harga),
     ]);
@@ -463,7 +578,7 @@ const Reports = () => {
       item.nama_produk,
       item.stok.toString(),
       item.stok_minimum.toString(),
-      item.stok <= item.stok_minimum ? 'Low' : 'OK',
+      item.stok === 0 ? 'Out of Stock' : (item.stok <= item.stok_minimum ? 'Menipis' : 'Aman'),
       formatCurrency(item.harga_beli),
       formatCurrency(item.stok * item.harga_beli),
     ]);
@@ -747,7 +862,9 @@ const Reports = () => {
                 {stockOutData.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="whitespace-nowrap">{format(new Date(item.tanggal), 'dd MMM yyyy', { locale: id })}</TableCell>
-                    <TableCell className="whitespace-nowrap font-medium">{item.products?.nama_produk || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap font-medium">
+                      {item.products?.nama_produk || item.bundles?.name || '-'}
+                    </TableCell>
                     <TableCell className="text-right">{item.qty}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">{formatCurrency(item.total_harga)}</TableCell>
                   </TableRow>
@@ -790,9 +907,13 @@ const Reports = () => {
                     <TableCell className="text-right">{item.stok_minimum}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
-                        item.stok <= item.stok_minimum ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
+                        item.stok === 0 
+                          ? 'bg-destructive/10 text-destructive' 
+                          : item.stok <= item.stok_minimum 
+                            ? 'bg-warning/10 text-warning' 
+                            : 'bg-success/10 text-success'
                       }`}>
-                        {item.stok <= item.stok_minimum ? 'Low' : 'OK'}
+                        {item.stok === 0 ? 'Out of Stock' : (item.stok <= item.stok_minimum ? 'Menipis' : 'Aman')}
                       </span>
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap">{formatCurrency(item.harga_beli)}</TableCell>
@@ -818,35 +939,101 @@ const Reports = () => {
             </DialogTitle>
           </DialogHeader>
           {assetData && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6">
+              {/* Annual Trend Chart */}
+              <div className="rounded-xl border bg-card p-3">
+                <div className="mb-2">
+                  <h3 className="text-xs font-semibold text-foreground">Tren Pergerakan Aset (12 Bulan Terakhir)</h3>
+                  <p className="text-[10px] text-muted-foreground">Perbandingan Nilai Masuk vs Nilai Keluar</p>
+                </div>
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={assetData.chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorMasukAsset" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="colorKeluarAsset" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(200, 80%, 50%)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(200, 80%, 50%)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 90%)" vertical={false} />
+                      <XAxis 
+                        dataKey="month" 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 10, fill: 'hsl(215, 16%, 47%)' }}
+                      />
+                      <YAxis 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 9, fill: 'hsl(215, 16%, 47%)' }}
+                        tickFormatter={(value) => `${value / 1000000}jt`}
+                      />
+                      <Tooltip 
+                        formatter={(value: number) => formatCurrency(value)}
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '11px' }}
+                      />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Area 
+                        type="monotone" 
+                        dataKey="masuk" 
+                        name="Nilai Masuk" 
+                        stroke="hsl(160, 84%, 39%)" 
+                        fill="url(#colorMasukAsset)" 
+                        strokeWidth={2}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="keluar" 
+                        name="Nilai Keluar" 
+                        stroke="hsl(200, 80%, 50%)" 
+                        fill="url(#colorKeluarAsset)" 
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Period Comparison Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-1 w-8 bg-primary rounded-full" />
+                  <h3 className="text-sm font-semibold">Perbandingan Periode</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs text-muted-foreground">Nilai Aset ({period === 'current' ? 'Bulan Ini' : 'Periode Ini'})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xl font-bold">{formatCurrency(assetData.current)}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs text-muted-foreground">Nilai Aset (Bulan Lalu)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xl font-bold">{formatCurrency(assetData.previous)}</p>
+                    </CardContent>
+                  </Card>
+                </div>
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm text-muted-foreground">Nilai Aset Bulan Ini</CardTitle>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs text-muted-foreground">Perubahan Bersih</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-bold">{formatCurrency(assetData.current)}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm text-muted-foreground">Nilai Aset Bulan Lalu</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-bold">{formatCurrency(assetData.previous)}</p>
+                    <p className={`text-xl font-bold ${assetData.change >= 0 ? 'text-success' : 'text-destructive'}`}>
+                      {assetData.change >= 0 ? '+' : ''}{formatCurrency(assetData.change)} ({assetData.changePercent.toFixed(2)}%)
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Dibandingkan dengan bulan sebelumnya</p>
                   </CardContent>
                 </Card>
               </div>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm text-muted-foreground">Perubahan</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className={`text-2xl font-bold ${assetData.change >= 0 ? 'text-success' : 'text-destructive'}`}>
-                    {assetData.change >= 0 ? '+' : ''}{formatCurrency(assetData.change)} ({assetData.changePercent.toFixed(2)}%)
-                  </p>
-                </CardContent>
-              </Card>
             </div>
           )}
         </DialogContent>

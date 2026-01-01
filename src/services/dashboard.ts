@@ -1,5 +1,11 @@
 import { supabase } from '@/lib/supabase';
 
+export interface AverageSales {
+  daily: { product: number; bundle: number };
+  weekly: { product: number; bundle: number };
+  monthly: { product: number; bundle: number };
+}
+
 export interface DashboardMetrics {
   totalProducts: number;
   totalStock: number;
@@ -9,16 +15,17 @@ export interface DashboardMetrics {
   monthlyStockOut: number;
   monthlyRevenue: number;
   monthlyProfit: number;
-  averageSales: {
-    daily: number;      // 1 hari terakhir
-    weekly: number;     // rata-rata per hari dalam 7 hari terakhir
-    monthly: number;    // rata-rata per hari dalam 30 hari terakhir
-  };
+  averageSales: AverageSales;
 }
 
 export interface TopProduct {
   name: string;
   sold: number;
+}
+
+export interface TopProductsData {
+  products: TopProduct[];
+  bundles: TopProduct[];
 }
 
 export interface StockFlow {
@@ -51,82 +58,94 @@ export const fetchDashboardMetrics = async (): Promise<DashboardMetrics> => {
     const lowStockCount = lowStockProducts?.filter(p => p.stok <= p.stok_minimum).length ?? 0;
 
     // Get monthly stock in (current month)
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    const startOfMonthDate = startOfMonth(new Date());
 
     const { data: stockInData } = await supabase
       .from('stock_in')
       .select('qty')
-      .gte('tanggal', startOfMonth.toISOString());
+      .gte('tanggal', startOfMonthDate.toISOString());
 
     const monthlyStockIn = stockInData?.reduce((sum, item) => sum + item.qty, 0) ?? 0;
 
     // Get monthly stock out (current month)
     const { data: stockOutData } = await supabase
       .from('stock_out')
-      .select('qty, total_harga')
-      .gte('tanggal', startOfMonth.toISOString());
+      .select('qty, total_harga, product_id, bundle_id')
+      .gte('tanggal', startOfMonthDate.toISOString());
 
     const monthlyStockOut = stockOutData?.reduce((sum, item) => sum + item.qty, 0) ?? 0;
     const monthlyRevenue = stockOutData?.reduce((sum, item) => sum + (item.total_harga || 0), 0) ?? 0;
 
     // Calculate monthly profit (revenue - cost)
-    const { data: stockOutWithCost } = await supabase
+    // We already fetch bundle costs in Reports.tsx, let's do similar or handle nulls
+    const { data: stockOutWithDetails } = await supabase
       .from('stock_out')
       .select(`
         qty,
         total_harga,
         product_id,
-        products!inner(harga_beli)
+        bundle_id,
+        products (harga_beli),
+        bundles (
+          bundle_items (
+            qty, 
+            products (harga_beli)
+          )
+        )
       `)
-      .gte('tanggal', startOfMonth.toISOString())
-      .not('product_id', 'is', null);
+      .gte('tanggal', startOfMonthDate.toISOString());
 
-    const monthlyCost = stockOutWithCost?.reduce((sum, item: any) => {
-      const cost = item.qty * (item.products?.harga_beli || 0);
-      return sum + cost;
+    const monthlyCost = stockOutWithDetails?.reduce((sum, item: any) => {
+      if (item.product_id && item.products) {
+        return sum + (item.qty * (item.products.harga_beli || 0));
+      } else if (item.bundle_id && item.bundles) {
+        const bundleCost = item.bundles.bundle_items?.reduce((bSum: number, bi: any) => {
+          return bSum + (bi.qty * (bi.products?.harga_beli || 0));
+        }, 0) || 0;
+        return sum + (item.qty * bundleCost);
+      }
+      return sum;
     }, 0) ?? 0;
 
     const monthlyProfit = monthlyRevenue - monthlyCost;
 
-    // Calculate average sales (1 day, 7 days, 30 days)
+    // Calculate average sales (1 day, 7 days, 30 days) split by product/bundle
     const now = new Date();
     
+    // Helper to calculate totals from data
+    const getTotals = (data: any[] | null) => {
+      return {
+        product: data?.filter(i => i.product_id).reduce((sum, i) => sum + i.qty, 0) ?? 0,
+        bundle: data?.filter(i => i.bundle_id).reduce((sum, i) => sum + i.qty, 0) ?? 0,
+      };
+    };
+
     // 1 day ago
     const oneDayAgo = new Date(now);
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-    
     const { data: dailySales } = await supabase
       .from('stock_out')
-      .select('qty')
+      .select('qty, product_id, bundle_id')
       .gte('tanggal', oneDayAgo.toISOString());
-    
-    const dailyTotal = dailySales?.reduce((sum, item) => sum + item.qty, 0) ?? 0;
+    const dailyTotals = getTotals(dailySales);
     
     // 7 days ago
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
     const { data: weeklySales } = await supabase
       .from('stock_out')
-      .select('qty')
+      .select('qty, product_id, bundle_id')
       .gte('tanggal', sevenDaysAgo.toISOString());
-    
-    const weeklyTotal = weeklySales?.reduce((sum, item) => sum + item.qty, 0) ?? 0;
-    const weeklyAverage = weeklyTotal / 7;
+    const weeklyTotals = getTotals(weeklySales);
     
     // 30 days ago
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
     const { data: monthlySales } = await supabase
       .from('stock_out')
-      .select('qty')
+      .select('qty, product_id, bundle_id')
       .gte('tanggal', thirtyDaysAgo.toISOString());
-    
-    const monthlyTotal = monthlySales?.reduce((sum, item) => sum + item.qty, 0) ?? 0;
-    const monthlyAverage = monthlyTotal / 30;
+    const monthlyTotals = getTotals(monthlySales);
 
     return {
       totalProducts: totalProducts ?? 0,
@@ -138,9 +157,9 @@ export const fetchDashboardMetrics = async (): Promise<DashboardMetrics> => {
       monthlyRevenue,
       monthlyProfit,
       averageSales: {
-        daily: Math.round(dailyTotal),
-        weekly: Math.round(weeklyAverage),
-        monthly: Math.round(monthlyAverage),
+        daily: { product: Math.round(dailyTotals.product), bundle: Math.round(dailyTotals.bundle) },
+        weekly: { product: Math.round(weeklyTotals.product / 7), bundle: Math.round(weeklyTotals.bundle / 7) },
+        monthly: { product: Math.round(monthlyTotals.product / 30), bundle: Math.round(monthlyTotals.bundle / 30) },
       },
     };
   } catch (error) {
@@ -149,38 +168,49 @@ export const fetchDashboardMetrics = async (): Promise<DashboardMetrics> => {
   }
 };
 
-// Fetch top products (most sold)
-export const fetchTopProducts = async (): Promise<TopProduct[]> => {
+// Fetch top products (most sold) split by product and bundle
+export const fetchTopProducts = async (): Promise<TopProductsData> => {
   try {
     const { data, error } = await supabase
       .from('stock_out')
       .select(`
         qty,
-        products!inner(nama_produk)
-      `)
-      .not('product_id', 'is', null);
+        product_id,
+        bundle_id,
+        products (nama_produk),
+        bundles (name)
+      `);
 
     if (error) throw error;
 
     // Aggregate by product
     const productMap = new Map<string, number>();
+    const bundleMap = new Map<string, number>();
+
     data?.forEach((item: any) => {
-      const productName = item.products?.nama_produk;
-      if (productName) {
-        productMap.set(productName, (productMap.get(productName) || 0) + item.qty);
+      if (item.product_id && item.products) {
+        const name = item.products.nama_produk;
+        productMap.set(name, (productMap.get(name) || 0) + item.qty);
+      } else if (item.bundle_id && item.bundles) {
+        const name = item.bundles.name;
+        bundleMap.set(name, (bundleMap.get(name) || 0) + item.qty);
       }
     });
 
-    // Convert to array and sort
-    const topProducts = Array.from(productMap.entries())
+    const products = Array.from(productMap.entries())
       .map(([name, sold]) => ({ name, sold }))
       .sort((a, b) => b.sold - a.sold)
       .slice(0, 5);
 
-    return topProducts;
+    const bundles = Array.from(bundleMap.entries())
+      .map(([name, sold]) => ({ name, sold }))
+      .sort((a, b) => b.sold - a.sold)
+      .slice(0, 5);
+
+    return { products, bundles };
   } catch (error) {
     console.error('Error fetching top products:', error);
-    return [];
+    return { products: [], bundles: [] };
   }
 };
 

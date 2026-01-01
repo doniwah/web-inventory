@@ -180,38 +180,58 @@ const Index = () => {
         {/* Average Sales Metrics */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Rata-rata Terjual</p>
-                <p className="text-2xl font-bold text-foreground">{metrics.averageSales.daily} pcs</p>
-                <p className="text-xs text-muted-foreground">1 hari terakhir</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-muted-foreground">Rata-rata Terjual (1 Hari)</p>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-chart-1/10">
+                <TrendingUp className="h-4 w-4 text-chart-1" />
               </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-1/10">
-                <TrendingUp className="h-5 w-5 text-chart-1" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="border-r pr-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Satuan</p>
+                <p className="text-xl font-bold">{metrics.averageSales.daily.product} <span className="text-[10px] font-normal">pcs</span></p>
+              </div>
+              <div className="pl-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Bundling</p>
+                <p className="text-xl font-bold">{metrics.averageSales.daily.bundle} <span className="text-[10px] font-normal">pcs</span></p>
               </div>
             </div>
           </div>
+
           <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Rata-rata Terjual</p>
-                <p className="text-2xl font-bold text-foreground">{metrics.averageSales.weekly} pcs/hari</p>
-                <p className="text-xs text-muted-foreground">7 hari terakhir</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-muted-foreground">Rata-rata Terjual (7 Hari)</p>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-chart-3/10">
+                <TrendingUp className="h-4 w-4 text-chart-3" />
               </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-3/10">
-                <TrendingUp className="h-5 w-5 text-chart-3" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="border-r pr-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Satuan</p>
+                <p className="text-xl font-bold">{metrics.averageSales.weekly.product} <span className="text-[10px] font-normal">pcs/hr</span></p>
+              </div>
+              <div className="pl-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Bundling</p>
+                <p className="text-xl font-bold">{metrics.averageSales.weekly.bundle} <span className="text-[10px] font-normal">pcs/hr</span></p>
               </div>
             </div>
           </div>
+
           <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Rata-rata Terjual</p>
-                <p className="text-2xl font-bold text-foreground">{metrics.averageSales.monthly} pcs/hari</p>
-                <p className="text-xs text-muted-foreground">30 hari terakhir</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-muted-foreground">Rata-rata Terjual (30 Hari)</p>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-chart-5/10">
+                <TrendingUp className="h-4 w-4 text-chart-5" />
               </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-5/10">
-                <TrendingUp className="h-5 w-5 text-chart-5" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="border-r pr-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Satuan</p>
+                <p className="text-xl font-bold">{metrics.averageSales.monthly.product} <span className="text-[10px] font-normal">pcs/hr</span></p>
+              </div>
+              <div className="pl-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Bundling</p>
+                <p className="text-xl font-bold">{metrics.averageSales.monthly.bundle} <span className="text-[10px] font-normal">pcs/hr</span></p>
               </div>
             </div>
           </div>

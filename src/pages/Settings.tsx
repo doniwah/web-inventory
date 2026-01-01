@@ -10,7 +10,11 @@ import {
   Upload, 
   Bell, 
   Save,
+  User,
+  Lock,
+  Mail,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -21,14 +25,35 @@ type UserSettings = {
 };
 
 const Settings = () => {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const { toast } = useToast();
   const [settings, setSettings] = useState<UserSettings>({
     low_stock_alerts: true,
     auto_backup: true,
   });
+  
+  // Profile state
+  const [profile, setProfile] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Sync profile state with user data
+  useEffect(() => {
+    if (user) {
+      setProfile(prev => ({
+        ...prev,
+        name: user.name || '',
+        email: user.email || '',
+      }));
+    }
+  }, [user]);
 
   // Fetch user settings
   useEffect(() => {
@@ -59,6 +84,47 @@ const Settings = () => {
       console.error('Error fetching settings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!user) return;
+
+    // Validation
+    if (!profile.name || !profile.email) {
+      toast({ title: 'Error', description: 'Nama dan Email harus diisi', variant: 'destructive' });
+      return;
+    }
+
+    if (profile.password && profile.password !== profile.confirmPassword) {
+      toast({ title: 'Error', description: 'Konfirmasi password tidak cocok', variant: 'destructive' });
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      await updateProfile({
+        name: profile.name,
+        email: profile.email,
+        ...(profile.password ? { password: profile.password } : {}),
+      });
+
+      toast({
+        title: 'Berhasil',
+        description: 'Profil berhasil diperbarui',
+      });
+
+      // Clear password fields
+      setProfile(prev => ({ ...prev, password: '', confirmPassword: '' }));
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Gagal memperbarui profil',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -252,6 +318,90 @@ const Settings = () => {
       subtitle="Konfigurasi sistem"
     >
       <div className="grid gap-6 max-w-2xl">
+        {/* Profile Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <User className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Profil Saya</CardTitle>
+                <CardDescription>Kelola informasi akun Anda</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nama Lengkap</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="name"
+                  value={profile.name}
+                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                  className="pl-9"
+                  placeholder="Nama Lengkap"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="email"
+                  type="email"
+                  value={profile.email}
+                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                  className="pl-9"
+                  placeholder="Alamat Email"
+                />
+              </div>
+            </div>
+            
+            <hr className="my-4" />
+            
+            <div className="space-y-2">
+              <Label htmlFor="password">Password Baru (Opsional)</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="password"
+                  type="password"
+                  value={profile.password}
+                  onChange={(e) => setProfile({ ...profile, password: e.target.value })}
+                  className="pl-9"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Konfirmasi Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="confirmPassword"
+                  type="password"
+                  value={profile.confirmPassword}
+                  onChange={(e) => setProfile({ ...profile, confirmPassword: e.target.value })}
+                  className="pl-9"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            <Button 
+              className="w-full mt-4 gap-2 gradient-primary text-primary-foreground border-0"
+              onClick={handleUpdateProfile}
+              disabled={savingProfile}
+            >
+              <Save className="h-4 w-4" />
+              {savingProfile ? 'Memproses...' : 'Perbarui Profil'}
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Notifications */}
         <Card>
           <CardHeader>

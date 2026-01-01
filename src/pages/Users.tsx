@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/hooks/useAuth';
 import {
   Dialog,
   DialogContent,
@@ -73,6 +74,7 @@ const Users = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -81,6 +83,24 @@ const Users = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+  const { user: currentUser, updateProfile } = useAuth();
+
+  const openAddDialog = () => {
+    setEditingUser(null);
+    setFormData({ name: '', email: '', password: '', role: 'admin' });
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (user: User) => {
+    setEditingUser(user);
+    setFormData({
+      name: user.name,
+      email: user.email,
+      password: '', // Password empty when editing
+      role: user.role,
+    });
+    setDialogOpen(true);
+  };
 
   // Fetch users
   const fetchUsers = async () => {
@@ -107,18 +127,28 @@ const Users = () => {
     fetchUsers();
   }, []);
 
-  // Handle add user
-  const handleAddUser = async () => {
-    if (!formData.name || !formData.email || !formData.password) {
+  // Handle submit (add or edit)
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.email) {
       toast({
         title: 'Error',
-        description: 'Semua field harus diisi',
+        description: 'Nama dan Email harus diisi',
         variant: 'destructive',
       });
       return;
     }
 
-    if (formData.password.length < 6) {
+    // Password required only for new users
+    if (!editingUser && !formData.password) {
+      toast({
+        title: 'Error',
+        description: 'Password harus diisi',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!editingUser && formData.password.length < 6) {
       toast({
         title: 'Error',
         description: 'Password minimal 6 karakter',
@@ -130,54 +160,87 @@ const Users = () => {
     setSubmitting(true);
 
     try {
-      // Sign up user dengan Supabase Auth
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
+      if (editingUser) {
+        // Mode Edit
+        const isSelf = currentUser?.id === editingUser.id;
+
+        // 1. Update Profile (Name & Role) in public.users
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
             name: formData.name,
             role: formData.role,
-          },
-          emailRedirectTo: undefined, // Disable email confirmation
-        },
-      });
+            email: formData.email, // Also update email in table
+          })
+          .eq('id', editingUser.id);
 
-      if (signUpError) {
-        throw signUpError;
-      }
+        if (updateError) throw updateError;
 
-      if (!authData.user) {
-        throw new Error('Gagal membuat user');
-      }
+        // 2. Update Auth (Email / Password)
+        if (formData.password || formData.email !== editingUser.email) {
+          if (isSelf) {
+            // If editing self, we can use updateProfile which handles supabase.auth.updateUser
+            await updateProfile({
+              name: formData.name,
+              email: formData.email,
+              ...(formData.password ? { password: formData.password } : {}),
+            });
+          } else {
+            // If editing others, warn that auth update needs Edge Function
+            toast({
+              title: 'Peringatan',
+              description: 'Profil tabel diperbarui, namun perubahan Email/Password pengguna lain memerlukan otorisasi tingkat server (Edge Function).',
+              variant: 'default',
+            });
+          }
+        }
 
-      // Insert ke public.users
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          name: formData.name,
+        toast({
+          title: 'Berhasil',
+          description: 'User berhasil diperbarui',
+        });
+      } else {
+        // Mode Tambah: Sign up user dengan Supabase Auth
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
-          role: formData.role,
+          password: formData.password,
+          options: {
+            data: {
+              name: formData.name,
+              role: formData.role,
+            },
+            emailRedirectTo: undefined,
+          },
         });
 
-      if (insertError) {
-        throw insertError;
-      }
+        if (signUpError) throw signUpError;
+        if (!authData.user) throw new Error('Gagal membuat user');
 
-      toast({
-        title: 'Berhasil',
-        description: 'User berhasil ditambahkan',
-      });
+        // Insert ke public.users
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: authData.user.id,
+            name: formData.name,
+            email: formData.email,
+            role: formData.role,
+          });
+
+        if (insertError) throw insertError;
+
+        toast({
+          title: 'Berhasil',
+          description: 'User berhasil ditambahkan',
+        });
+      }
       
       setDialogOpen(false);
-      setFormData({ name: '', email: '', password: '', role: 'admin' });
       fetchUsers();
     } catch (error: any) {
-      console.error('Error creating user:', error);
+      console.error('Error saving user:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Gagal menambahkan user',
+        description: error.message || 'Gagal menyimpan user',
         variant: 'destructive',
       });
     } finally {
@@ -222,7 +285,7 @@ const Users = () => {
         <div className="flex justify-end">
           <Button 
             className="gap-2 gradient-primary text-primary-foreground border-0 shadow-glow"
-            onClick={() => setDialogOpen(true)}
+            onClick={openAddDialog}
           >
             <Plus className="h-4 w-4" />
             Tambah Pengguna
@@ -292,7 +355,10 @@ const Users = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem className="gap-2">
+                            <DropdownMenuItem 
+                              className="gap-2"
+                              onClick={() => openEditDialog(user)}
+                            >
                               <Pencil className="h-4 w-4" /> Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem 
@@ -317,9 +383,11 @@ const Users = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah Pengguna Baru</DialogTitle>
+            <DialogTitle>{editingUser ? 'Edit Pengguna' : 'Tambah Pengguna Baru'}</DialogTitle>
             <DialogDescription>
-              Buat akun pengguna baru dengan mengisi form di bawah ini.
+              {editingUser 
+                ? 'Perbarui informasi nama dan role pengguna.' 
+                : 'Buat akun pengguna baru dengan mengisi form di bawah ini.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -346,14 +414,21 @@ const Users = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">
+                {editingUser ? 'Password Baru (Opsional)' : 'Password'}
+              </Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Minimal 6 karakter"
+                placeholder={editingUser ? "Isi untuk ganti password" : "Minimal 6 karakter"}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               />
+              {editingUser && currentUser?.id !== editingUser.id && (
+                <p className="text-[10px] text-muted-foreground italic">
+                  * Password pengguna lain hanya bisa diubah via panel admin database/Edge Function.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -377,8 +452,8 @@ const Users = () => {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Batal
             </Button>
-            <Button onClick={handleAddUser} disabled={submitting}>
-              {submitting ? 'Menyimpan...' : 'Tambah User'}
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Menyimpan...' : editingUser ? 'Simpan Perubahan' : 'Tambah User'}
             </Button>
           </DialogFooter>
         </DialogContent>
