@@ -95,11 +95,11 @@ const Index = () => {
   return (
     <MainLayout 
       title="Dashboard" 
-      subtitle="Selamat datang kembali! Berikut ringkasan inventori Anda."
+      subtitle="Berikut ringkasan inventori Anda."
     >
       <div className="space-y-6">
         {/* Metrics Grid */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             title="Total Produk"
             value={metrics.totalProducts}
@@ -126,7 +126,7 @@ const Index = () => {
         </div>
 
         {/* Secondary Metrics */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -178,7 +178,7 @@ const Index = () => {
         </div>
 
         {/* Average Sales Metrics */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
               <div>

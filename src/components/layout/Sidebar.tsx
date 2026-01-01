@@ -49,7 +49,12 @@ const masterDataItems: NavItem[] = [
   { title: 'Pengaturan', href: '/settings', icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isMobileOpen?: boolean;
+  setIsMobileOpen?: (open: boolean) => void;
+}
+
+export function Sidebar({ isMobileOpen, setIsMobileOpen }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -123,10 +128,11 @@ export function Sidebar() {
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300',
-        collapsed ? 'w-16' : 'w-64'
+        collapsed ? 'w-16' : 'w-64',
+        isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       )}
     >
-      {/* Logo */}
+      {/* Logo & Close Button */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         {!collapsed && (
           <div className="flex items-center gap-2 animate-fade-in">
@@ -144,10 +150,25 @@ export function Sidebar() {
             <Box className="h-5 w-5 text-primary-foreground" />
           </div>
         )}
+        
+        {/* Mobile Close Button */}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="lg:hidden text-sidebar-foreground hover:bg-sidebar-accent"
+          onClick={() => setIsMobileOpen?.(false)}
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav 
+        className="flex-1 space-y-1 overflow-y-auto px-3 py-4"
+        onClick={() => {
+          if (window.innerWidth < 1024) setIsMobileOpen?.(false);
+        }}
+      >
         <div className="space-y-1">
           {filteredNavItems.map((item) => (
             <NavLink key={item.href} item={item} />

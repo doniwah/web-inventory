@@ -694,28 +694,30 @@ const Reports = () => {
               </Button>
             </DialogTitle>
           </DialogHeader>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Produk</TableHead>
-                <TableHead>Supplier</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stockInData.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{format(new Date(item.tanggal), 'dd MMM yyyy', { locale: id })}</TableCell>
-                  <TableCell>{item.products?.nama_produk || '-'}</TableCell>
-                  <TableCell>{item.suppliers?.nama_supplier || '-'}</TableCell>
-                  <TableCell className="text-right">{item.qty}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.total_harga)}</TableCell>
+          <div className="rounded-lg border overflow-x-auto custom-scrollbar">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Produk</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {stockInData.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="whitespace-nowrap">{format(new Date(item.tanggal), 'dd MMM yyyy', { locale: id })}</TableCell>
+                    <TableCell className="whitespace-nowrap font-medium">{item.products?.nama_produk || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{item.suppliers?.nama_supplier || '-'}</TableCell>
+                    <TableCell className="text-right">{item.qty}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{formatCurrency(item.total_harga)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -731,26 +733,28 @@ const Reports = () => {
               </Button>
             </DialogTitle>
           </DialogHeader>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Produk</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stockOutData.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{format(new Date(item.tanggal), 'dd MMM yyyy', { locale: id })}</TableCell>
-                  <TableCell>{item.products?.nama_produk || '-'}</TableCell>
-                  <TableCell className="text-right">{item.qty}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.total_harga)}</TableCell>
+          <div className="rounded-lg border overflow-x-auto custom-scrollbar">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Produk</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {stockOutData.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="whitespace-nowrap">{format(new Date(item.tanggal), 'dd MMM yyyy', { locale: id })}</TableCell>
+                    <TableCell className="whitespace-nowrap font-medium">{item.products?.nama_produk || '-'}</TableCell>
+                    <TableCell className="text-right">{item.qty}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{formatCurrency(item.total_harga)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -766,36 +770,38 @@ const Reports = () => {
               </Button>
             </DialogTitle>
           </DialogHeader>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Produk</TableHead>
-                <TableHead className="text-right">Stok</TableHead>
-                <TableHead className="text-right">Min</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Harga Beli</TableHead>
-                <TableHead className="text-right">Nilai</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stockData.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.nama_produk}</TableCell>
-                  <TableCell className="text-right">{item.stok}</TableCell>
-                  <TableCell className="text-right">{item.stok_minimum}</TableCell>
-                  <TableCell>
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      item.stok <= item.stok_minimum ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
-                    }`}>
-                      {item.stok <= item.stok_minimum ? 'Low' : 'OK'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.harga_beli)}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(item.stok * item.harga_beli)}</TableCell>
+          <div className="rounded-lg border overflow-x-auto custom-scrollbar">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produk</TableHead>
+                  <TableHead className="text-right">Stok</TableHead>
+                  <TableHead className="text-right">Min</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Harga Beli</TableHead>
+                  <TableHead className="text-right">Nilai</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {stockData.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium whitespace-nowrap">{item.nama_produk}</TableCell>
+                    <TableCell className="text-right">{item.stok}</TableCell>
+                    <TableCell className="text-right">{item.stok_minimum}</TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
+                        item.stok <= item.stok_minimum ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
+                      }`}>
+                        {item.stok <= item.stok_minimum ? 'Low' : 'OK'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{formatCurrency(item.harga_beli)}</TableCell>
+                    <TableCell className="text-right font-semibold whitespace-nowrap">{formatCurrency(item.stok * item.harga_beli)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -858,44 +864,46 @@ const Reports = () => {
               </Button>
             </DialogTitle>
           </DialogHeader>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Produk</TableHead>
-                <TableHead className="text-right">Harga Beli</TableHead>
-                <TableHead className="text-right">Harga Jual</TableHead>
-                <TableHead className="text-right">Margin</TableHead>
-                <TableHead className="text-right">Margin %</TableHead>
-                <TableHead className="text-right">Stok</TableHead>
-                <TableHead className="text-right">Potensi Profit</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {marginData.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.nama_produk}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.harga_beli)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.harga_jual)}</TableCell>
-                  <TableCell className="text-right">
-                    <span className={item.margin >= 0 ? 'text-success' : 'text-destructive'}>
-                      {formatCurrency(item.margin)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className={item.margin_percent >= 0 ? 'text-success' : 'text-destructive'}>
-                      {item.margin_percent.toFixed(2)}%
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">{item.stok}</TableCell>
-                  <TableCell className="text-right font-semibold">
-                    <span className={item.potential_profit >= 0 ? 'text-success' : 'text-destructive'}>
-                      {formatCurrency(item.potential_profit)}
-                    </span>
-                  </TableCell>
+          <div className="rounded-lg border overflow-x-auto custom-scrollbar">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produk</TableHead>
+                  <TableHead className="text-right">Harga Beli</TableHead>
+                  <TableHead className="text-right">Harga Jual</TableHead>
+                  <TableHead className="text-right">Margin</TableHead>
+                  <TableHead className="text-right">Margin %</TableHead>
+                  <TableHead className="text-right">Stok</TableHead>
+                  <TableHead className="text-right">Potensi Profit</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {marginData.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium whitespace-nowrap">{item.nama_produk}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{formatCurrency(item.harga_beli)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{formatCurrency(item.harga_jual)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <span className={item.margin >= 0 ? 'text-success' : 'text-destructive'}>
+                        {formatCurrency(item.margin)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <span className={item.margin_percent >= 0 ? 'text-success' : 'text-destructive'}>
+                        {item.margin_percent.toFixed(2)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">{item.stok}</TableCell>
+                    <TableCell className="text-right font-semibold whitespace-nowrap">
+                      <span className={item.potential_profit >= 0 ? 'text-success' : 'text-destructive'}>
+                        {formatCurrency(item.potential_profit)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           {marginData.length > 0 && (
             <div className="mt-4 p-4 rounded-lg bg-secondary/30">
               <div className="grid grid-cols-2 gap-4">

@@ -215,7 +215,7 @@ export function ActivityHistory() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border bg-card overflow-hidden">
+      <div className="rounded-xl border bg-card overflow-x-auto custom-scrollbar">
         <Table>
           <TableHeader>
             <TableRow className="bg-secondary/50 hover:bg-secondary/50">
@@ -234,7 +234,6 @@ export function ActivityHistory() {
               </TableRow>
             ) : (
               filteredLogs.map((log, index) => {
-                // Fallback to 'adjustment' if type is not found in config
                 const config = typeConfig[log.type] || typeConfig.adjustment;
                 const Icon = config.icon;
 
@@ -247,19 +246,19 @@ export function ActivityHistory() {
                     <TableCell>
                       <Badge 
                         variant="outline" 
-                        className={cn('gap-1.5', config.color)}
+                        className={cn('gap-1.5 whitespace-nowrap', config.color)}
                       >
                         <Icon className="h-3 w-3" />
                         {config.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-medium text-foreground">
+                    <TableCell className="font-medium text-foreground min-w-[200px]">
                       {log.description}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
                       {log.user_name}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
                       {format(log.timestamp, 'dd MMM yyyy, HH:mm', { locale: id })}
                     </TableCell>
                   </TableRow>

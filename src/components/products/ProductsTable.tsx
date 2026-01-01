@@ -366,7 +366,8 @@ export function ProductsTable() {
       </div>
 
       {/* Table */}
-      <Table>
+      <div className="rounded-xl border bg-card overflow-x-auto custom-scrollbar">
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Produk</TableHead>
@@ -444,6 +445,7 @@ export function ProductsTable() {
           )}
         </TableBody>
       </Table>
+      </div>
 
       {/* Pagination */}
       <div className="flex justify-end gap-2">

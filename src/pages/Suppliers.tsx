@@ -36,6 +36,7 @@ import {
   Building2,
   Phone,
   MapPin,
+  User,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -250,88 +251,78 @@ const Suppliers = () => {
         </div>
 
         {/* Table */}
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-secondary/50 hover:bg-secondary/50">
-                <TableHead className="font-semibold">Supplier</TableHead>
-                <TableHead className="font-semibold">Kontak</TableHead>
-                <TableHead className="font-semibold">Alamat</TableHead>
-                <TableHead className="font-semibold">Terdaftar</TableHead>
-                <TableHead className="w-10"></TableHead>
+        {/* Desktop Table View */}
+      <div className="rounded-xl border bg-card overflow-x-auto custom-scrollbar">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Supplier</TableHead>
+              <TableHead>Kontak</TableHead>
+              <TableHead>Alamat</TableHead>
+              {canManage && <TableHead className="w-[100px]" />}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredSuppliers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
+                  Tidak ada supplier
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredSuppliers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    Tidak ada data supplier
+            ) : (
+              filteredSuppliers.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell>
+                    <div className="flex gap-3 items-center">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Building2 className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="font-medium text-foreground">{s.nama_supplier}</div>
+                    </div>
                   </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <User className="h-4 w-4" /> {s.kontak || '-'}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4 shrink-0" /> 
+                      <span className="truncate max-w-[200px]">{s.alamat || '-'}</span>
+                    </div>
+                  </TableCell>
+                  
+                  {canManage && (
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenDialog(s)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => {
+                              setSelectedSupplier(s);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Hapus
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  )}
                 </TableRow>
-              ) : (
-                filteredSuppliers.map((supplier, index) => (
-                  <TableRow 
-                    key={supplier.id}
-                    className="animate-fade-in"
-                    style={{ animationDelay: `${index * 30}ms` }}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-4/10">
-                          <Building2 className="h-5 w-5 text-chart-4" />
-                        </div>
-                        <span className="font-medium text-foreground">{supplier.nama_supplier}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Phone className="h-4 w-4" />
-                        {supplier.kontak || '-'}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <MapPin className="h-4 w-4" />
-                        {supplier.alamat || '-'}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {format(new Date(supplier.created_at), 'dd MMM yyyy', { locale: id })}
-                    </TableCell>
-                    {canManage && (
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              className="gap-2"
-                              onClick={() => handleOpenDialog(supplier)}
-                            >
-                              <Pencil className="h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="gap-2 text-destructive"
-                              onClick={() => {
-                                setSelectedSupplier(supplier);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" /> Hapus
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
         {/* Add/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
