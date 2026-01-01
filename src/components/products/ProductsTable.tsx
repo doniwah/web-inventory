@@ -375,7 +375,7 @@ export function ProductsTable() {
             <TableHead className="text-right">Harga Jual</TableHead>
             <TableHead className="text-center">Stok</TableHead>
             <TableHead>Status</TableHead>
-            {isAdmin && <TableHead />}
+            {canManage && <TableHead />}
           </TableRow>
         </TableHeader>
 
