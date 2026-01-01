@@ -173,6 +173,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Listen for real-time changes to user data (permissions/role)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('📡 Setting up realtime subscription for user:', user.id);
+    
+    const channel = supabase
+      .channel(`user-updates-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `id=eq.${user.id}`,
+        },
+        async (payload) => {
+          console.log('🔄 User data changed in database, refreshing session...', payload);
+          // Refetch user data from the database to update the local state
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const userData = await fetchUserData(session.user);
+            if (userData) {
+              setUser(userData);
+              console.log('✅ User data successfully synced');
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Subscription status:', status);
+      });
+
+    return () => {
+      console.log('🔌 Cleaning up realtime subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+
   const login = async (email: string, password: string) => {
     console.log('🔐 Starting login process...');
     
