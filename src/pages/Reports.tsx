@@ -508,7 +508,7 @@ const Reports = () => {
       // Calculate margins
       const margins: ProductMargin[] = Array.from(marginMap.entries()).map(([key, data], index) => {
         const margin = data.harga_jual - data.harga_beli;
-        const margin_percent = data.harga_beli > 0 ? (margin / data.harga_beli) * 100 : 0;
+        const margin_percent = data.harga_jual > 0 ? (margin / data.harga_jual) * 100 : 0;
         const actual_profit = data.revenue - (data.qty_sold * data.harga_beli);
 
         return {

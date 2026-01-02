@@ -155,10 +155,17 @@ export function ProductsTable() {
   };
 
   const fetchSatuans = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("satuans")
       .select("id, nama_satuan")
       .order("nama_satuan");
+    
+    if (error) {
+      console.error("Error fetching satuans:", error);
+      return;
+    }
+    
+    console.log("Fetched satuans from database:", data);
     
     // Transform data to map units correctly
     // box -> Dus (Top), pack -> Pack (Middle), pcs -> Pcs (Bottom)
@@ -175,6 +182,7 @@ export function ProductsTable() {
     
     // Remove duplicates only for the dropdown selection
     const uniqueSatuans = mappedData.filter((v, i, a) => a.findIndex(t => t.nama_satuan === v.nama_satuan) === i);
+    console.log("Setting satuans state to:", uniqueSatuans);
     setSatuans(uniqueSatuans);
   };
 
@@ -205,7 +213,10 @@ export function ProductsTable() {
     };
   }, [page]);
 
-  const handleOpenDialog = (product?: Product) => {
+  const handleOpenDialog = async (product?: Product) => {
+    // Refresh satuans data setiap kali dialog dibuka
+    await fetchSatuans();
+    
     if (product) {
       setEditMode(true);
       setSelectedProduct(product);
